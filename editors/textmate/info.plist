@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>Act</string>
+	<key>uuid</key>
+	<string>A5E5C5D0-8B4A-4F3E-9D2C-1A7B8C9D0E1F</string>
+	<key>contactEmailRot13</key>
+	<string>bevby.zz@tznvy.pbz</string>
+	<key>description</key>
+	<string>Syntax highlighting for the Act scripting language</string>
+	<key>mainMenu</key>
+	<dict>
+		<key>items</key>
+		<array/>
+	</dict>
+</dict>
+</plist>

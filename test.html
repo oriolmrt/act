@@ -1,0 +1,2686 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Act Tests</title>
+    <script src="act.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: #2c2c2c;
+            color: #eee;
+            padding: 16px;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
+        .stat.total {
+            background: #333;
+        }
+
+        .stat.pass {
+            background: #2d5a27;
+        }
+
+        .stat.fail {
+            background: #7a2828;
+        }
+
+        .filters {
+            margin-bottom: 12px;
+        }
+
+        .filters button {
+            padding: 4px 12px;
+            margin-right: 8px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+        }
+
+        #tests {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 4px;
+        }
+
+        @media (min-width: 1200px) {
+            #tests {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+        }
+
+        @media (min-width: 1600px) {
+            #tests {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .test-group {
+            grid-column: 1 / -1;
+        }
+
+        .test-group>summary.group {
+            background: #171717;
+            padding: 8px 12px;
+            margin: 12px 0 8px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .test-group>summary.group::-webkit-details-marker {
+            display: none;
+        }
+
+        .test-group>summary.group::before {
+            content: '▶ ';
+            font-size: 0.7rem;
+            margin-right: 4px;
+        }
+
+        .test-group[open]>summary.group::before {
+            content: '▼ ';
+        }
+
+        .group-stats {
+            display: inline-flex;
+            gap: 6px;
+            margin-left: 8px;
+        }
+
+        .group-stats .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .group-stats .badge.pass {
+            background: rgba(68, 170, 68, 0.2);
+            color: #4a4;
+        }
+
+        .group-stats .badge.fail {
+            background: rgba(170, 68, 68, 0.2);
+            color: #a44;
+        }
+
+        .group-stats .badge.total {
+            background: rgba(136, 136, 136, 0.2);
+            color: #888;
+        }
+
+        .group-tests {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 4px;
+        }
+
+        @media (min-width: 1200px) {
+            .group-tests {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+        }
+
+        @media (min-width: 1600px) {
+            .group-tests {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        .test {
+            display: flex;
+            gap: 8px;
+            padding: 6px 8px;
+            border-left: 3px solid #444;
+            border-top: 1px solid #333;
+            border-right: 1px solid #333;
+            border-bottom: 1px solid #333;
+            margin: 4px 0;
+            background: #222;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .test.pass {
+            border-left-color: #4a4;
+        }
+
+        .test.fail {
+            border-left-color: #a44;
+        }
+
+        .test .status {
+            width: 20px;
+            min-width: 20px;
+            flex-shrink: 0;
+            text-align: center;
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+
+        .test .name {
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        .test .name code {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.75rem;
+            color: #888;
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .test .info {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .test.fail .info {
+            color: #f88;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        [data-target] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Act Tests</h1>
+    <div class="stats">
+        <div class="stat total">Total: <span id="s-total">0</span></div>
+        <div class="stat pass">Pass: <span id="s-pass">0</span></div>
+        <div class="stat fail">Fail: <span id="s-fail">0</span></div>
+    </div>
+    <div class="filters">
+        <button onclick="filter('all')">All</button>
+        <button onclick="filter('fail')">Failed</button>
+        <button onclick="filter('pass')">Passed</button>
+        <button onclick="toggleAll()">Toggle all</button>
+    </div>
+    <div id="tests">
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- VALUE TYPES -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Value Types
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+
+            <div class="group-tests">
+
+                <div class="test" id="string-single-quotes">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>string-single-quotes</code> String (single quotes)</div>
+                    <div data-target data-e="Hello">
+                        <script type="text/act" act>
+                            $s: 'Hello';
+                            @r: $s;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="string-double-quotes">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>string-double-quotes</code> String (double quotes)</div>
+                    <div data-target data-e="World">
+                        <script type="text/act" act>
+                            $s: "World";
+                            @r: $s;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="number-integer">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>number-integer</code> Number (integer)</div>
+                    <div data-target data-e="42">
+                        <script type="text/act" act>
+                            $n: 42;
+                            @r: $n;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="number-float">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>number-float</code> Number (float)</div>
+                    <div data-target data-e="3.14">
+                        <script type="text/act" act>
+                            $n: 3.14;
+                            @r: $n;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="boolean-true">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>boolean-true</code> Boolean (true)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: true;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="boolean-false">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>boolean-false</code> Boolean (false)</div>
+                    <div data-target data-e="false">
+                        <script type="text/act" act>
+                            @r: false;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="array-indexing">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>array-indexing</code> Array indexing</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $a: [1 2 3];
+                            @r: $a[1];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="object-property">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>object-property</code> Object property</div>
+                    <div data-target data-e="obj_value">
+                        <script type="text/act" act>
+                            $o: [key: 'obj_value'];
+                            @r: $o.key;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="dimension-px">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>dimension-px</code> Dimension (px)</div>
+                    <div data-target data-e="100px">
+                        <script type="text/act" act>
+                            $x: 100px;
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="string-template">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>string-template</code> String template</div>
+                    <div data-target data-e="Hello act">
+                        <script type="text/act" act>
+                            $n: 'act';
+                            @r: `Hello {$n}`;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="global-variable-capital">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>global-variable-capital</code> Global variable (capital)</div>
+                    <div data-target data-e="global">
+                        <script type="text/act" act>
+                            $TestGlobal: 'global';
+                            @r: document.body.__act__.data.TestGlobal;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="local-variable">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>local-variable</code> Local variable</div>
+                    <div data-target data-e="local">
+                        <script type="text/act" act>
+                            local $loc: 'local';
+                            @r: __act__.data.loc;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="array-length">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>array-length</code> Array length</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $a: [1 2];
+                            @r: $a.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="object-property-access">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>object-property-access</code> Object property access</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $o: [a: 1 b: 2];
+                            @r: $o.a + $o.b;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- OPERATORS - ARITHMETIC -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Operators - Arithmetic
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="addition">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>addition</code> Addition (+)</div>
+                    <div data-target data-e="15">
+                        <script type="text/act" act>
+                            @r: 10 + 5;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="subtraction">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>subtraction</code> Subtraction (-)</div>
+                    <div data-target data-e="7">
+                        <script type="text/act" act>
+                            @r: 10 - 3;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="multiplication">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>multiplication</code> Multiplication (*)</div>
+                    <div data-target data-e="42">
+                        <script type="text/act" act>
+                            @r: 6 * 7;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="division">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>division</code> Division (/)</div>
+                    <div data-target data-e="5">
+                        <script type="text/act" act>
+                            @r: 20 / 4;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="modulo">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>modulo</code> Modulo (%)</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            @r: 10 % 3;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="string-concatenation">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>string-concatenation</code> String concatenation</div>
+                    <div data-target data-e="HelloWorld">
+                        <script type="text/act" act>
+                            @r: 'Hello' + 'World';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="addition-vars">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>addition-vars</code> Addition (vars)</div>
+                    <div data-target data-e="15">
+                        <script type="text/act" act>
+                            $a: 10;
+                            $b: 5;
+                            @r: $a + $b;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- OPERATORS - COMPARISON -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Operators - Comparison
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="strict-equal-is">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>strict-equal-is</code> Strict equal (is)</div>
+                    <div data-target data-e="false">
+                        <script type="text/act" act>
+                            @r: 5 is '5';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="strict-not-equal-is-not">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>strict-not-equal-is-not</code> Strict not equal (is_not)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 5 is_not '5';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="loose-equal">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>loose-equal</code> Loose equal (==)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: '1' == 1;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="loose-not-equal">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>loose-not-equal</code> Loose not equal (!=)</div>
+                    <div data-target data-e="false">
+                        <script type="text/act" act>
+                            @r: '1' != 1;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="greater-than">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>greater-than</code> Greater than (>)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 10 > 5;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="greater-or-equal">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>greater-or-equal</code> Greater or equal (>=)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 5 >= 5;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="less-than-lt">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>less-than-lt</code> Less than (&lt;)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 3 < 5;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="less-or-equal-lt">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>less-or-equal-lt</code> Less or equal (&lt;=)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 5 <= 5;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- OPERATORS - LOGIC -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Operators - Logic
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="and-true-and-true">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>and-true-and-true</code> AND (true and true)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: true and true;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="and-true-and-false">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>and-true-and-false</code> AND (true and false)</div>
+                    <div data-target data-e="false">
+                        <script type="text/act" act>
+                            @r: true and false;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="or-false-or-true">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>or-false-or-true</code> OR (false or true)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: false or true;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="not-not-true">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>not-not-true</code> NOT (not true)</div>
+                    <div data-target data-e="false">
+                        <script type="text/act" act>
+                            @r: not true;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- OPERATORS - ASSIGNMENT -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Operators - Assignment
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="add-assign">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>add-assign</code> Add assign (+=)</div>
+                    <div data-target data-e="8">
+                        <script type="text/act" act>
+                            $x: 5;
+                            $x += 3;
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="subtract-assign">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>subtract-assign</code> Subtract assign (-=)</div>
+                    <div data-target data-e="6">
+                        <script type="text/act" act>
+                            $x: 10;
+                            $x -= 4;
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="set">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>set</code> Set (=)</div>
+                    <div data-target data-e="42">
+                        <script type="text/act" act>
+                            $x = 0;
+                            $x = 42;
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- OPERATORS - OTHER -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">Operators - Other
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="is-in-array">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-in-array</code> is_in (array)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 2 is_in [1 2 3];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-in-object-key">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-in-object-key</code> is_in (object key)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 'a' is_in [a: 1 b: 2 c: 3];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-in-string">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-in-string</code> is_in (string)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 'o' is_in 'hello';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-not-in">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-not-in</code> is_not_in</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 5 is_not_in [1 2 3];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-a-number">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-a-number</code> is_a number</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 42 is_a number;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-a-string">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-a-string</code> is_a string</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 'hi' is_a string;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-an-array">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-an-array</code> is_an array</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: [1 2] is_an array;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="then-pipe">
+                    <script type="text/act" act>
+                        // Placing the script outside the target div to test the "then" operator
+                        $v: 'piped';
+                        #then-test then @r: $v;
+                    </script>
+                    <div class="status">⏳</div>
+                    <div class="name"><code>then-pipe</code> then (pipe)</div>
+                    <div data-target data-e="piped" id="then-test"></div>
+                </div>
+
+                <div class="test" id="ltlt-insert-direct">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>ltlt-insert-direct</code> &lt;&lt; insert (direct)</div>
+                    <div data-target data-e="inserted">
+                        <script type="text/act" act>
+                            << 'inserted';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="ltlt-insert-operator">
+                    <script type="text/act" act>
+                        #insert-operator-test << 'inserted';
+                    </script>
+                    <div class="status">⏳</div>
+                    <div class="name"><code>ltlt-insert-operator</code> &lt;&lt; insert (operator)</div>
+                    <div data-target data-e="inserted" id="insert-operator-test"></div>
+                </div>
+
+                <div class="test" id="null-or-fallback">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>null-or-fallback</code> null or fallback</div>
+                    <div data-target data-e="caught">
+                        <script type="text/act" act>
+                            $x: null or 'caught';
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- CAST OPERATIONS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Cast Operations (as)
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="as-number">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-number</code> as number</div>
+                    <div data-target data-e="42">
+                        <script type="text/act" act>
+                            $x: '42' as number;
+                            $x is_a number? @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-float">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-float</code> as float</div>
+                    <div data-target data-e="3.14">
+                        <script type="text/act" act>
+                            $x: '3.14' as float;
+                            $x is_a float? @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-int">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-int</code> as int</div>
+                    <div data-target data-e="99">
+                        <script type="text/act" act>
+                            $x: '99' as int;
+                            $x is_an int? @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-string">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-string</code> as string</div>
+                    <div data-target data-e="123">
+                        <script type="text/act" act>
+                            $x: 123 as string;
+                            $x is_a string? @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-boolean">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-boolean</code> as boolean</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            $x: 'true' as boolean;
+                            $x is_a boolean? @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-id">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-id</code> as id</div>
+                    <div data-target data-e="#found">
+                        <script type="text/act" act>
+                            $x: 'found' as id;
+                            $x is_an id? @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-fragment">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-fragment</code> as fragment</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $frag: '<span>test</span>' as fragment;
+                            @r: $frag.children.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-selector">
+                    <script type="text/act" act>
+                        $sel: '#as-selector [data-target]' as selector;
+                        $sel.first! @r: 'done';
+                    </script>
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-selector</code> as selector</div>
+                    <div data-target data-e="done" id="as-selector-target"></div>
+                    <div class="as-selector-test"></div>
+                </div>
+
+                <div class="test" id="as-attribute">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-attribute</code> as attribute</div>
+                    <div data-target data-e="attr-value">
+                        <script type="text/act" act>
+                            r as attribute = 'attr-value';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-css-property">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-css-property</code> as css_property</div>
+                    <div data-target data-e="block" style="display: block;">
+                        <script type="text/act" act>
+                            @r: display as css_property;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-variable">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-variable</code> as variable</div>
+                    <div data-target data-e="var-value">
+                        <script type="text/act" act>
+                            $myvar: 'var-value';
+                            @r: 'myvar' as variable;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-class">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-class</code> as class</div>
+                    <div data-target data-e=".myclass">
+                        <script type="text/act" act>
+                            $x: 'myclass' as class;
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-json">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-json</code> as json</div>
+                    <div data-target data-e='{"a":1,"b":2}'>
+                        <script type="text/act" act>
+                            $obj: [a: 1 b: 2];
+                            @r: $obj as json;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="as-dimension">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>as-dimension</code> as dimension</div>
+                    <div data-target data-e="100px">
+                        <script type="text/act" act>
+                            $x: '100px' as dimension;
+                            @r: $x;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- KEYWORDS - CONDITIONALS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">Keywords - Conditionals
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="if-true">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>if-true</code> if (true)</div>
+                    <div data-target data-e="yes">
+                        <script type="text/act" act>
+                            if true (@r: 'yes');
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="if-else">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>if-else</code> if-else</div>
+                    <div data-target data-e="no">
+                        <script type="text/act" act>
+                            if false (@r: 'yes') else (@r: 'no');
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="terminator">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>terminator</code> ? terminator</div>
+                    <div data-target data-e="cond">
+                        <script type="text/act" act>
+                            true? @r: 'cond';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="else-branch">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>else-branch</code> else? branch</div>
+                    <div data-target data-e="branch">
+                        <script type="text/act" act>
+                            false? @r: 'no' else? @r: 'branch';
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- KEYWORDS - LOOPS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Keywords - Loops
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="each-array">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>each-array</code> each (array)</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $c: 0;
+                            each $i in [1 2 3] ($c += 1);
+                            @r: $c;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="for-loop-to">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>for-loop-to</code> for loop (to)</div>
+                    <div data-target data-e="5">
+                        <script type="text/act" act>
+                            $s: 0;
+                            for $i to 4 ($s += 1);
+                            @r: $s;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="for-loop-from-to">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>for-loop-from-to</code> for loop (from-to)</div>
+                    <div data-target data-e="6">
+                        <script type="text/act" act>
+                            $s: 0;
+                            for $i from 1 to 3 ($s += $i);
+                            @r: $s;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="while-loop">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>while-loop</code> while loop</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $i: 0;
+                            while $i < 3 ($i += 1);
+                            @r: $i;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="break-in-loop">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>break-in-loop</code> break in loop</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $c: 0;
+                            for $i to 10 ($c += 1;
+                            $i is 2? break);
+                            @r: $c;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="continue-in-loop">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>continue-in-loop</code> continue in loop</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $c: 0;
+                            for $i to 3 ($i is 1? continue;
+                            $c += 1);
+                            @r: $c;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="each-object-kv">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>each-object-kv</code> each (object k/v)</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $o: [a: 1, b: 2];
+                            $s: 0;
+                            each $k $v in $o ($s += $v);
+                            @r: $s;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- KEYWORDS - OTHER -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Keywords - Other
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="with-keyword">
+                    <script type="text/act" act>
+                        // Placing the script outside the target element
+                        with #with-keyword-target (@r: 'with');
+                    </script>
+                    <div class="status">⏳</div>
+                    <div class="name"><code>with-keyword</code> with keyword</div>
+                    <div data-target data-e="with" id="with-keyword-target"></div>
+                </div>
+
+                <div class="test" id="new-element">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>new-element</code> new element</div>
+                    <div data-target data-e="ok">
+                        <script type="text/act" act>
+                            $e: new <span>; 
+                            $e is_a <span>? @r: 'ok';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="stop-signal">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stop-signal</code> stop signal</div>
+                    <div data-target data-e="before">
+                        <script type="text/act" act>
+                            @r: 'before';
+                            stop;
+                            @r: 'after';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="doend-block">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>doend-block</code> do...end block</div>
+                    <div data-target data-e="10">
+                        <script type="text/act" act>
+                            do $x: 5;
+                            $x += 5;
+                            @r: $x;
+                            end;
+                        </script>
+                    </div>
+                </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- BLOCKS (DEF/RUN) -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+            </div>
+        </details>
+        <details class="test-group" open>
+            <summary class="group">
+                Blocks (def/run)
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="def-and-run">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>def-and-run</code> def and run</div>
+                    <div data-target data-e="ran">
+                        <script type="text/act" act>
+                            def myblock $a do 
+                                << $a;
+                            end;
+                            @r: run myblock 'ran';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="act-block-attribute">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>act-block-attribute</code> act-block attribute</div>
+                    <div data-target data-e="external">
+                        <script type="text/act" act-block="ext_block $v">
+                            << $v;
+                        </script>
+                        <script type="text/act" act>
+                            @r: run ext_block 'external';
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ANONYMOUS FUNCTIONS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Anonymous Functions
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="anonymous-fn-no-args">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>anonymous-fn-no-args</code> Anonymous fn (no args)</div>
+                    <div data-target data-e="result">
+                        <script type="text/act" act>
+                            $fn: ->('result');
+                            @r: $fn!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="block-with-arg">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>block-with-arg</code> Block with arg</div>
+                    <div data-target data-e="15">
+                        <script type="text/act" act>
+                            $fn: -> $x ($x + 10);
+                            @r: $fn!: 5;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="block-with-multi-args">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>block-with-multi-args</code> Block with multi args</div>
+                    <div data-target data-e="12">
+                        <script type="text/act" act>
+                            $fn: -> $a $b ($a * $b);
+                            @r: $fn!: 3 4;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="this-in-object-method">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>this-in-object-method</code> $this in object method</div>
+                    <div data-target data-e="John">
+                        <script type="text/act" act>
+                            $person: [
+                                name: 'John'
+                                get_name: -> ($this.name)
+                            ];
+                            @r: $person.get_name!;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LIBRARY.WORDS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Library.words 
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="me-in-each">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>me-in-each</code> me (in each)</div>
+                    <div data-target data-e="found">
+                        <script type="text/act" act>
+                            $el: me;
+                            [1 2 3] each (me is 2? $el @r: 'found');
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="document">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>document</code> document</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: document.title.length > 0;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="window">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>window</code> window</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: window is_a 'window';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="null">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>null</code> null</div>
+                    <div data-target data-e="null">
+                        <script type="text/act" act>
+                            @r: null;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="undefined">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>undefined</code> undefined</div>
+                    <div data-target data-e="undefined">
+                        <script type="text/act" act>
+                            @r: undefined;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LIBRARY.PREFIXES -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Library.prefixes
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="global-prefix">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>global-prefix</code> global prefix</div>
+                    <div data-target data-e="gval">
+                        <script type="text/act" act>
+                            global $gvar: 'gval';
+                            @r: document.body.__act__.data.gvar;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="local-prefix">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>local-prefix</code> local prefix</div>
+                    <div data-target data-e="lval">
+                        <script type="text/act" act>
+                            local $lvar: 'lval';
+                            @r: __act__.data.lvar;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="negative-prefix">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>negative-prefix</code> negative prefix</div>
+                    <div data-target data-e="-10">
+                        <script type="text/act" act>
+                            @r: negative 10;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="type-prefix">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>type-prefix</code> type prefix</div>
+                    <div data-target data-e="number">
+                        <script type="text/act" act>
+                            @r: type 42;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LIBRARY.GLOBALS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Library.globals
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="wait">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>wait</code> wait</div>
+                    <div data-target data-e="waited">
+                        <script type="text/act" act>
+                            @r: 'not-waited';
+                            wait: 50ms;
+                            @r: 'waited';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="random">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>random</code> random</div>
+                    <div data-target data-e="ok">
+                        <script type="text/act" act>
+                            @r: 'not-random';
+                            $r: random: 1 10;
+                            $r >= 1 and $r <= 10? @r: 'ok';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="time-to-ms">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>time-to-ms</code> time_to_ms</div>
+                    <div data-target data-e="1000">
+                        <script type="text/act" act>
+                            @r: time_to_ms: 1s;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="delay">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>delay</code> delay</div>
+                    <div data-target data-e="delayed">
+                        <script type="text/act" act>
+                            @r: 'not-delayed';
+                            delay: 50ms (@r: 'delayed');
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LIBRARY.ELEMENT -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Library.Element
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="hide">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>hide</code> hide</div>
+                    <div data-target data-e="hidden">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el hide!;
+                            $el *display is none? @r: 'hidden';
+                        </script>
+                    </div>
+                    <div class="test-el" style="display:block"></div>
+                </div>
+
+                <div class="test" id="show">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>show</code> show</div>
+                    <div data-target data-e="shown">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el *display: none;
+                            $el show!;
+                            $el *display is ''? @r: 'shown';
+                        </script>
+                    </div>
+                    <div class="test-el" style="display:none"></div>
+                </div>
+
+                <div class="test" id="toggle-class">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>toggle-class</code> toggle class</div>
+                    <div data-target data-e="toggled">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el toggle: .toggled;
+                            $el has: .toggled? @r: 'toggled';
+                        </script>
+                    </div>
+                    <div class="test-el"></div>
+                </div>
+
+                <div class="test" id="element-insert">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>element-insert</code> element insert</div>
+                    <div data-target data-e="text">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el << 'text';
+                            @r: 'text';
+                        </script>
+                    </div>
+                    <div class="test-el"></div>
+                </div>
+
+                <div class="test" id="empty">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>empty</code> empty</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el << 'content';
+                            $el empty!;
+                            $el :innerHTML is ''? @r: 'true';
+                        </script>
+                    </div>
+                    <div class="test-el"></div>
+                </div>
+
+                <div class="test" id="add-class">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>add-class</code> add class</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el add: .added;
+                            $el has: .added? @r: 'true';
+                        </script>
+                    </div>
+                    <div class="test-el"></div>
+                </div>
+
+                <div class="test" id="add-attribute">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>add-attribute</code> add attribute</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el add: @data-added;
+                            $el has_attribute: data-added? @r: 'true';
+                        </script>
+                    </div>
+                    <div class="test-el"></div>
+                </div>
+
+                <div class="test" id="remove-class">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>remove-class</code> remove class</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            $el: next: .test-el;
+                            $el remove: .to-remove;
+                            @r: not ($el has: .to-remove);
+                        </script>
+                    </div>
+                    <div class="test-el to-remove"></div>
+                </div>
+
+                <div class="test" id="parent-is-a-div">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>parent-is-a-div</code> parent is_a div</div>
+                    <div data-target data-e="div">
+                        <script type="text/act" act>
+                            parent! is_a <div>? @r: 'div';
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LIBRARY.ARRAY -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Library.Array
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="map">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>map</code> map</div>
+                    <div data-target data-e="4">
+                        <script type="text/act" act>
+                            $a: [1 2 3].map: -> $x ($x * 2);
+                            @r: $a[1];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="filter">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>filter</code> filter</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $a: [1 2 3 4].filter: -> $x ($x > 2);
+                            @r: $a.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="find">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>find</code> find</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $f: [1 2 3].find: -> $x ($x > 1);
+                            @r: $f;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="some">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>some</code> some</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: [1 2 3].some: -> $x ($x is 2);
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="every">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>every</code> every</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: [2 4 6].every: -> $x ($x % 2 is 0);
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="find-index">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>find-index</code> find_index</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            @r: [10 20 30].find_index: -> $x ($x > 15);
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LIBRARY.STRING -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Library.String
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="after">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>after</code> after</div>
+                    <div data-target data-e="world">
+                        <script type="text/act" act>
+                            @r: 'hello world'.after: ' ';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="before">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>before</code> before</div>
+                    <div data-target data-e="hello">
+                        <script type="text/act" act>
+                            @r: 'hello world'.before: ' ';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="between">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>between</code> between</div>
+                    <div data-target data-e="world">
+                        <script type="text/act" act>
+                            @r: 'hello [world]'.between: '[' ']';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="capitalize">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>capitalize</code> capitalize</div>
+                    <div data-target data-e="Hello">
+                        <script type="text/act" act>
+                            @r: 'hello'.capitalize!;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- NATIVE JS METHODS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Native JS Methods
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="touppercase">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>touppercase</code> toUpperCase</div>
+                    <div data-target data-e="HELLO">
+                        <script type="text/act" act>
+                            @r: 'hello'.to_upper_case!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="tolowercase">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>tolowercase</code> toLowerCase</div>
+                    <div data-target data-e="hello">
+                        <script type="text/act" act>
+                            @r: 'HELLO'.to_lower_case!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arraypop">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arraypop</code> array.pop</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            @r: [1 2 3].pop!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arrayshift">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arrayshift</code> array.shift</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            @r: [1 2 3].shift!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arrayjoin">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arrayjoin</code> array.join</div>
+                    <div data-target data-e="a-b-c">
+                        <script type="text/act" act>
+                            @r: [a b c].join: '-';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="stringincludes">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stringincludes</code> string.includes</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: 'hello'.includes: 'ell';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="stringsplit">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stringsplit</code> string.split</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $p: 'a-b-c'.split: '-';
+                            @r: $p.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arraypush">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arraypush</code> array.push</div>
+                    <div data-target data-e="4">
+                        <script type="text/act" act>
+                            $arr: [1 2 3];
+                            $arr.push: 4;
+                            @r: $arr.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arrayslice">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arrayslice</code> array.slice</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $arr: [1 2 3];
+                            $s: $arr.slice: 1 2;
+                            @r: $s[0];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arraysort">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arraysort</code> array.sort</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $arr: [5 1 3];
+                            $arr.sort!;
+                            @r: $arr[0];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="arrayreverse">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>arrayreverse</code> array.reverse</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $arr: [1 2 3];
+                            $arr.reverse!;
+                            @r: $arr[0];
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SELECTORS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Selectors
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="id-selector">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>id-selector</code> ID selector (#)</div>
+                    <div id="test-id-selector" data-target data-e="ok">
+                        <script type="text/act" act>
+                            #test-id-selector @r: 'ok';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="class-selector">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>class-selector</code> Class selector (.)</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            @r: .t191-cls.length;
+                        </script>
+                    </div>
+                    <div class="t191-cls"></div>
+                    <div class="t191-cls"></div>
+                </div>
+
+                <div class="test" id="selector-interpolation">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-interpolation</code> Selector interpolation</div>
+                    <div id="test-interp-selector" data-target data-e="interp">
+                        <script type="text/act" act>
+                            $id: 'test-interp-selector';
+                            $id as id then @r: 'interp';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="queryselectorall">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>queryselectorall</code> querySelectorAll</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $x: .t193-child;
+                            @r: $x.length;
+                        </script>
+                    </div>
+                    <div class="t193-child"></div>
+                    <div class="t193-child"></div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SPREAD OPERATOR -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Spread Operator
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="spread-variable">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>spread-variable</code> Spread variable (...$var)</div>
+                    <div data-target data-e="6">
+                        <script type="text/act" act>
+                            $nums: [1 2 3];
+                            $arr: [...$nums 4 5 6];
+                            @r: $arr.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="spread-inline">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>spread-inline</code> Spread inline array (...[...])</div>
+                    <div data-target data-e="5">
+                        <script type="text/act" act>
+                            $arr: [0 ...[1 2 3] 4];
+                            @r: $arr.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="spread-nested">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>spread-nested</code> Nested spread</div>
+                    <div data-target data-e="6">
+                        <script type="text/act" act>
+                            $a: [1 2];
+                            $b: [3 4];
+                            $arr: [...$a ...$b 5 6];
+                            @r: $arr.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="spread-value">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>spread-value</code> Spread preserves values</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $nums: [[1] [2] 3];
+                            $arr: [...$nums];
+                            @r: $arr[2];
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="spread-function-call">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>spread-function-call</code> Spread in function call</div>
+                    <div data-target data-e="6">
+                        <script type="text/act" act>
+                            $add: -> $a $b $c ($a + $b + $c);
+                            $args: [1 2 3];
+                            @r: $add!: ...$args;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="spread-rest-param">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>spread-rest-param</code> Rest parameter (-> ...$a)</div>
+                    <div data-target data-e="6">
+                        <script type="text/act" act>
+                            $sum: -> ...$nums (
+                                $total: 0;
+                                each $n in $nums ($total += $n);
+                                $total;
+                            );
+                            @r: $sum!: 1 2 3;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SENTENCE MODES -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">Sentence Modes
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="sync-mode">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>sync-mode</code> Sync mode (;)</div>
+                    <div data-target data-e="sync">
+                        <script type="text/act" act>
+                            $v: 'sync';
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="async-mode-amp">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>async-mode-amp</code> Async mode (&amp;)</div>
+                    <div data-target data-e="async!">
+                        <script type="text/act" act>
+                            do
+                                wait: 100ms;
+                                @r += '!';
+                            end &
+                            @r: 'async';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="forward-mode-gtgt">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>forward-mode-gtgt</code> Forward mode (&gt;&gt;)</div>
+                    <div data-target data-e="fwd">
+                        <script type="text/act" act>
+                            $v: me;
+                            $v >> @r: 'fwd';
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SIGNALS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Signals 
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="stop-with-value">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stop-with-value</code> stop (with value)</div>
+                    <div data-target data-e="stopped">
+                        <script type="text/act" act>
+                            @r: do
+                                stop 'stopped';
+                                @r: 'not stopped';
+                            end;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="halt">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>halt</code> halt</div>
+                    <div data-target data-e="halted">
+                        <script type="text/act" act>
+                            @r: 'halted';
+                            halt;
+                            @r: 'not halted';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="break-in-loop-2">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>break-in-loop-2</code> break (in loop)</div>
+                    <div data-target data-e="3">
+                        <script type="text/act" act>
+                            $count: 0;
+                            loop (
+                                $count += 1;
+                                $count is 3? break;
+                                $count > 10? break;
+                            );
+                            @r: $count;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="break-with-value">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>break-with-value</code> break (with value)</div>
+                    <div data-target data-e="found">
+                        <script type="text/act" act>
+                            $result: loop (
+                                break 'found';
+                            );
+                            @r: $result;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="continue">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>continue</code> continue</div>
+                    <div data-target data-e="135">
+                        <script type="text/act" act>
+                            $result: '';
+                            for $i from 1 to 5 (
+                                $i % 2 is 0? continue;
+                                $result += $i;
+                            );
+                            @r: $result;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ERROR HANDLING -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Error Handling 
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="rescue-basic">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>rescue-basic</code> rescue (basic)</div>
+                    <div data-target data-e="rescued">
+                        <script type="text/act" act>
+                            $v: (throw 'error') rescue 'rescued';
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="rescue-scope-execution">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>rescue-scope-execution</code> rescue (scope execution)</div>
+                    <div data-target data-e="rescued">
+                        <script type="text/act" act>
+                            $v: (throw 'test error') rescue (
+                                $x: 'rescued';
+                                $x;
+                            );
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="rescue-scope-execution-exception">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>rescue-scope-execution-exception</code> rescue (scope execution)</div>
+                    <div data-target data-e="msg">
+                        <script type="text/act" act>
+                            $v: (throw 'msg') rescue (
+                                $exception.message;
+                            );
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- DIMENSION ARITHMETIC -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Dimension Arithmetic                 
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="dimension-other-units">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>dimension-other-units</code> Dimension (other units)</div>
+                    <div data-target data-e="2rem">
+                        <script type="text/act" act>
+                            $v: 2rem;
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="dimension-time-unit">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>dimension-time-unit</code> Dimension (time unit)</div>
+                    <div data-target data-e="500ms">
+                        <script type="text/act" act>
+                            $v: 500ms;
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="dimension-percent">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>dimension-percent</code> Dimension (percent)</div>
+                    <div data-target data-e="50%">
+                        <script type="text/act" act>
+                            $v: 50%;
+                            @r: $v;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- STRING METHODS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                String Methods
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="after-2">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>after-2</code> after</div>
+                    <div data-target data-e="world">
+                        <script type="text/act" act>
+                            @r: 'hello world'.after: ' ';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="before-2">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>before-2</code> before</div>
+                    <div data-target data-e="hello">
+                        <script type="text/act" act>
+                            @r: 'hello world'.before: ' ';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="between-2">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>between-2</code> between</div>
+                    <div data-target data-e="content">
+                        <script type="text/act" act>
+                            @r: 'hello [content] world'.between: '[' ']';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="capitalize-2">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>capitalize-2</code> capitalize</div>
+                    <div data-target data-e="Hello">
+                        <script type="text/act" act>
+                            @r: 'hello'.capitalize!;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SELECTOR PREFIXES -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">Selector Prefixes <span class="group-stats"><span class="badge pass">✓ <span
+                            class="g-pass">0</span></span><span class="badge fail">✗ <span
+                            class="g-fail">0</span></span><span class="badge total"><span
+                            class="g-total">0</span></span></span></summary>
+            <div class="group-tests">
+
+                <div class="test" id="child-selector">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>child-selector</code> Child selector (>)</div>
+                    <div data-target data-e="found">
+                        <div class="child-test">found</div>
+                        <script type="text/act" act>
+                            $children: {> .child-test};
+                            $el: $children.first!;
+                            @r: $el.inner_text;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-with-interpolation">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-with-interpolation</code> Selector with interpolation</div>
+                    <div data-target data-e="found" id="interp-target">
+                        <script type="text/act" act>
+                            $id: 'interp-target';
+                            $el: {#{$id}};
+                            $el? @r: 'found';
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- RESERVED WORDS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Reserved Words
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="source-element">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>source-element</code> source_element</div>
+                    <div data-target data-e="DIV">
+                        <script type="text/act" act>
+                            // source_element returns the binding element (container div)
+                            @r: source_element.tag_name;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="actversion">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>actversion</code> Act.version</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: Act.version is_a string;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- TYPE CHECKS (ADDITIONAL) -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Type Checks (Additional)
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="is-an-object">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-an-object</code> is_an object</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: [a: 1] is_an object;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-a-boolean">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-a-boolean</code> is_a boolean</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: true is_a boolean;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="is-a-element-tag-check">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>is-a-element-tag-check</code> is_a element (tag check)</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            @r: me is_a <div>;
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SHORT-CIRCUIT OPERATORS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Short-Circuit Operators
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="and-short-circuit">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>and-short-circuit</code> AND short-circuit</div>
+                    <div data-target data-e="false">
+                        <script type="text/act" act>
+                            // false AND anything should return false without evaluating right side
+                            @r: false and (throw 'should not run');
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="or-short-circuit">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>or-short-circuit</code> OR short-circuit</div>
+                    <div data-target data-e="true">
+                        <script type="text/act" act>
+                            // true OR anything should return true without evaluating right side
+                            @r: true or (throw 'should not run');
+                        </script>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- VALUE TYPES (ADDITIONAL) -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Value Types (Additional)
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="negative-number">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>negative-number</code> Negative number</div>
+                    <div data-target data-e="-42">
+                        <script type="text/act" act>
+                            @r: negative 42;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="array-clear">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>array-clear</code> Array clear</div>
+                    <div data-target data-e="0">
+                        <script type="text/act" act>
+                            $arr: [1 2 3];
+                            $arr.length: 0;
+                            @r: $arr.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="empty-object">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>empty-object</code> Empty object</div>
+                    <div data-target data-e="{}">
+                        <script type="text/act" act>
+                            $obj: [:];
+                            @r: $obj as json;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="nested-object">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>nested-object</code> Nested object</div>
+                    <div data-target data-e="nested">
+                        <script type="text/act" act>
+                            $obj: [a: [b: 'nested']];
+                            @r: $obj.a.b;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="nested-object-2">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>nested-object-2</code> Nested object</div>
+                    <div data-target data-e="deep">
+                        <script type="text/act" act>
+                            $obj: [a: [b: [c: 'deep']]];
+                            @r: $obj.a.b.c;
+                        </script>
+                    </div>
+                </div>
+
+            </div>
+
+            <script>
+                function filter(mode) {
+                    document.querySelectorAll('.test').forEach(t => {
+                        t.classList.remove('hidden');
+                        if (mode === 'pass' && !t.classList.contains('pass')) t.classList.add('hidden');
+                        if (mode === 'fail' && !t.classList.contains('fail')) t.classList.add('hidden');
+                    });
+                }
+
+                function toggleAll() {
+                    const details = document.querySelectorAll('.test-group');
+                    const allOpen = [...details].every(d => d.open);
+                    details.forEach(d => d.open = !allOpen);
+                }
+
+                setTimeout(() => {
+                    const tests = document.querySelectorAll('.test');
+                    document.getElementById('s-total').textContent = tests.length;
+                    let pass = 0, fail = 0;
+
+                    // Initialize group totals
+                    document.querySelectorAll('.test-group').forEach(group => {
+                        const total = group.querySelectorAll('.test').length;
+                        group.querySelector('.g-total').textContent = total;
+                    });
+
+                    tests.forEach(test => {
+                        const target = test.querySelector('[data-target]');
+                        if (!target) return;
+
+                        let checks = 0;
+                        const check = setInterval(() => {
+                            const hasR = target.hasAttribute('r');
+                            const result = hasR ? target.getAttribute('r') : target.innerHTML;
+                            const expected = target.getAttribute('data-e');
+
+                            // Only complete if we have data or timeout after 3 seconds
+                            if ((hasR || result) || checks > 30) {
+                                clearInterval(check);
+                                const status = test.querySelector('.status');
+                                const info = document.createElement('div');
+                                info.className = 'info';
+
+                                // Find parent group for per-group stats
+                                const group = test.closest('.test-group');
+                                const gPass = group?.querySelector('.g-pass');
+                                const gFail = group?.querySelector('.g-fail');
+
+                                if (result === expected) {
+                                    test.classList.add('pass');
+                                    status.textContent = '✓';
+                                    pass++;
+                                    if (gPass) gPass.textContent = parseInt(gPass.textContent) + 1;
+                                } else {
+                                    test.classList.add('fail');
+                                    status.textContent = '✗';
+                                    info.textContent = `Expected: ${expected}, Got: ${result || 'timeout'}`;
+                                    test.appendChild(info);
+                                    fail++;
+                                    if (gFail) gFail.textContent = parseInt(gFail.textContent) + 1;
+                                }
+                                document.getElementById('s-pass').textContent = pass;
+                                document.getElementById('s-fail').textContent = fail;
+                            }
+                            checks++;
+                        }, 100);
+                    });
+                }, 800);
+            </script>
+</body>
+
+</html>

@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Act Demo</title>
+    <script src="act.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+            background: #2c2c2c;
+            color: #eee;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #eee;
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 2.5rem;
+            font-weight: 600;
+        }
+
+        h2 {
+            color: #eee;
+            margin-bottom: 1.5rem;
+            margin-top: 2rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #444;
+            font-weight: 600;
+        }
+
+        h3 {
+            color: #ccc;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        /* Side-by-side layout */
+        .demo-example {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin: 1.5rem 0;
+            padding: 1.5rem;
+            background: #222;
+            border-radius: 6px;
+            border: 1px solid #333;
+        }
+
+        .demo-example h4 {
+            grid-column: 1 / -1;
+            color: #aaa;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid #444;
+        }
+
+        .demo-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .demo-panel-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #888;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .code-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        button:active {
+            background: #1d4ed8;
+        }
+
+        .box {
+            width: 120px;
+            height: 120px;
+            border-radius: 6px;
+            margin: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .red {
+            background-color: #ef4444;
+        }
+
+        .green {
+            background-color: #10b981;
+        }
+
+        .blue {
+            background-color: #3b82f6;
+        }
+
+        .yellow {
+            background-color: #f59e0b;
+        }
+
+        .purple {
+            background-color: #8b5cf6;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="range"] {
+            padding: 0.75rem;
+            border: 1px solid #444;
+            background: #333;
+            color: #eee;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin: 0.5rem;
+            transition: border-color 0.15s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .output {
+            background: #333;
+            color: #eee;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-top: 1rem;
+            border-left: 3px solid #3b82f6;
+            min-height: 2.5rem;
+        }
+
+        .item-list {
+            list-style: none;
+        }
+
+        .item-list li {
+            background: #333;
+            color: #eee;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-left: 3px solid #3b82f6;
+        }
+
+        .item-list li:hover {
+            background: #444;
+        }
+
+        .counter {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #eee;
+            text-align: center;
+            margin: 1rem 0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .card {
+            background: #3b82f6;
+            color: white;
+            padding: 1.5rem;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-weight: 500;
+        }
+
+        .card:hover {
+            background: #2563eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .fade-out {
+            opacity: 0;
+        }
+
+        .slider-container {
+            margin: 1rem 0;
+        }
+
+        .slider-value {
+            display: inline-block;
+            min-width: 50px;
+            text-align: center;
+            font-weight: 600;
+            color: #eee;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #444;
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+
+        .animated-box {
+            width: 100px;
+            height: 100px;
+            background: #3b82f6;
+            margin: 1rem auto;
+            border-radius: 6px;
+        }
+
+        /* Code block styling - Shiki will add its own styles */
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 0.5rem 0 1rem 0;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            overflow-x: auto;
+            border: 1px solid #334155;
+        }
+
+        .code-block code {
+            color: #e2e8f0;
+            font-family: inherit;
+            white-space: pre-wrap;
+        }
+
+        /* Override Shiki pre styles to fit our design */
+        .code-block pre {
+            margin: 0;
+            padding: 0;
+            background: transparent !important;
+        }
+
+        .code-block pre code {
+            background: transparent;
+        }
+
+        /* Shiki line numbers styling */
+        .shiki code {
+            counter-reset: step;
+            counter-increment: step 0;
+        }
+
+        /* Responsive: stack on smaller screens */
+        @media (max-width: 1024px) {
+            .demo-example {
+                grid-template-columns: 1fr;
+            }
+
+            .demo-example h4 {
+                grid-column: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Act Demo</h1>
+
+        <!-- 1. ANIMATIONS & FADING -->
+        <h2>Animations & Fading</h2>
+
+            <div class="demo-example">
+                <h4>Fade Effects</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="fade-box" class="box purple">Fade Me!</div>
+                    <div>
+                        <button act@click="#fade-box fade: out 500ms">Fade Out</button>
+                        <button act@click="#fade-box fade: in 500ms">Fade In</button>
+                        <button act@click="#fade-box fade: out 500ms; wait: 600ms; #fade-box fade: in 500ms">Fade Out &
+                            In</button>
+                    </div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Fade out" act@click
+#fade-box fade: out 500ms</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Fade in" act@click
+#fade-box fade: in 500ms</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Fade out & in" act@click
+#fade-box fade: out 500ms;
+wait: 600ms;
+#fade-box fade: in 500ms</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Repeating Animation</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="pulse-box" class="box green">
+                        <script type="text/act">
+                            fade: out 500ms;
+                            fade: in 500ms;
+                            repeat;
+                        </script>
+                        Pulsing!
+                    </div>
+                    <button act@click="#pulse-box kill act">Stop Animation</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// #pulse-box script (auto-runs on load)
+fade: out 500ms;
+fade: in 500ms;
+repeat;</code></div>
+                    <div class="code-block"><code class="language-act">// Button act@click
+#pulse-box kill act</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Collapse Animation</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="collapse-target" class="box blue">Click to Collapse</div>
+                    <button act@click="#collapse-target collapse!: 800ms ease-out">Collapse Element</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button act@click
+#collapse-target collapse!: 800ms ease-out</code></div>
+                </div>
+            </div>
+
+        <!-- 2. CSS TRANSITIONS -->
+        <h2>CSS Transitions</h2>
+
+            <div class="demo-example">
+                <h4>Color Transitions</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="transition-box" class="box red">Transition Me!</div>
+                    <div>
+                        <button act@click="#transition-box transition: background-color to #2ecc71 in 1s">Green</button>
+                        <button act@click="#transition-box transition: background-color to #3498db in 1s">Blue</button>
+                        <button
+                            act@click="#transition-box transition: background-color to #f39c12 in 1s">Yellow</button>
+                        <button act@click="#transition-box transition: background-color to #e74c3c in 1s">Red</button>
+                    </div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Green" act@click
+#transition-box transition: background-color to #2ecc71 in 1s</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Blue" act@click
+#transition-box transition: background-color to #3498db in 1s</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Yellow" act@click
+#transition-box transition: background-color to #f39c12 in 1s</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Red" act@click
+#transition-box transition: background-color to #e74c3c in 1s</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Multiple Property Transitions</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="multi-transition-box" class="animated-box"></div>
+                    <button act@click="
+                        #multi-transition-box transition: 
+                            transform to 'scale(1.5) rotate(180deg)' in 1s
+                            background-color to #764ba2 in 1s
+                            border-radius to 50% in 1s;
+                    ">Transform!</button>
+                    <button act@click="
+                        #multi-transition-box transition: 
+                            transform to 'scale(1) rotate(0deg)' in 1s
+                            background-color to #1e40af in 1s
+                            border-radius to 8px in 1s;
+                    ">Reset</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Transform!" act@click
+#multi-transition-box transition:
+    transform to 'scale(1.5) rotate(180deg)' in 1s
+    background-color to #764ba2 in 1s
+    border-radius to 50% in 1s;</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Reset" act@click
+#multi-transition-box transition:
+    transform to 'scale(1) rotate(0deg)' in 1s
+    background-color to #1e40af in 1s
+    border-radius to 8px in 1s;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Smooth Color Cycling</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="cycle-box" style="width: 100%; height: 100px; border-radius: 8px;">
+                        <script type="text/act">
+                            transition: background-color to #e74c3c in 1s;
+                            transition: background-color to #3498db in 1s;
+                            transition: background-color to #2ecc71 in 1s;
+                            transition: background-color to #f39c12 in 1s;
+                            repeat;
+                        </script>
+                    </div>
+                    <button id="stop-cycling" act@click="#cycle-box kill act">Stop Cycling</button>
+                    <button id="start-cycling" act@click="#cycle-box trigger: act">Start Cycling</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// #cycle-box script (auto-runs on load)
+transition: background-color to #e74c3c in 1s;
+transition: background-color to #3498db in 1s;
+transition: background-color to #2ecc71 in 1s;
+transition: background-color to #f39c12 in 1s;
+repeat;</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Stop Cycling" act@click
+#cycle-box kill act</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Start Cycling" act@click
+#cycle-box trigger: act</code></div>
+                </div>
+            </div>
+
+        <!-- 3. INPUT HANDLING -->
+        <h2>Input Handling</h2>
+
+            <div class="demo-example">
+                <h4>Text Input - Live Update</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <input type="text" id="name-input" placeholder="Type your name..."
+                        act@input="#name-output << `Hello, {:value}!`">
+                    <div id="name-output" class="output">Hello, stranger!</div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Input #name-input act@input
+#name-output &lt;&lt; `Hello, {:value}!`</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Number Input - Calculation</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <input type="number" id="num1" placeholder="Number 1" value="0"
+                        act@input="#calc-result << `Result: {(#num1.value as number) + (#num2.value as number)}`">
+                    <span style="font-size: 1.5rem; margin: 0 1rem;">+</span>
+                    <input type="number" id="num2" placeholder="Number 2" value="0"
+                        act@input="#calc-result << `Result: {(#num1.value as number) + (#num2.value as number)}`">
+                    <div id="calc-result" class="output">Result: 0</div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Input #num1 and #num2 act@input
+#calc-result &lt;&lt; `Result: {(#num1.value as number) + (#num2.value as number)}`</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Range Slider</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div class="slider-container">
+                        <input type="range" id="slider" min="0" max="100" value="50" style="width: 300px;" act@input="
+                                #slider-value << :value;
+                                #progress-fill *width: `{#slider.value}%`;
+                                #progress-fill << `{:value}%`;
+                            ">
+                        <span id="slider-value" class="slider-value">50</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill" style="width: 50%;">50%</div>
+                    </div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Input #slider act@input
+#slider-value &lt;&lt; :value;
+#progress-fill *width: `{#slider.value}%`;
+#progress-fill &lt;&lt; `{:value}%`;</code></div>
+                </div>
+            </div>
+
+        <!-- 4. BUTTON INTERACTIONS -->
+        <h2>Button Interactions</h2>
+
+            <div class="demo-example">
+                <h4>Counter</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="counter" class="counter">0</div>
+                    <div>
+                        <button act@click="#counter << #counter.inner_text as number + 1">Increment (+1)</button>
+                        <button act@click="#counter << #counter.inner_text as number - 1">Decrement (-1)</button>
+                        <button act@click="#counter << 0">Reset</button>
+                    </div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Increment (+1)" act@click
+#counter &lt;&lt; #counter.inner_text as number + 1</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Decrement (-1)" act@click
+#counter &lt;&lt; #counter.inner_text as number - 1</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Reset" act@click
+#counter &lt;&lt; 0</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Toggle Visibility</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="toggle-target" class="box yellow">Toggle Me!</div>
+                    <button act@click="#toggle-target toggle!">Toggle Visibility</button>
+                    <button act@click="#toggle-target show!">Show</button>
+                    <button act@click="#toggle-target hide!">Hide</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Toggle Visibility" act@click
+#toggle-target toggle!</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Show" act@click
+#toggle-target show!</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Hide" act@click
+#toggle-target hide!</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Delayed Action</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <button act@click="
+                        disabled: true;
+                        << 'Wait 2 seconds...';
+                        wait: 2s;
+                        alert: 'Time is up!';
+                        disabled: false;
+                        << 'Click for Delayed Alert';
+                    ">Click for Delayed Alert</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button act@click
+disabled: true;
+&lt;&lt; 'Wait 2 seconds...';
+wait: 2s;
+alert: 'Time is up!';
+disabled: false;
+&lt;&lt; 'Click for Delayed Alert';</code></div>
+                </div>
+            </div>
+
+        <!-- 5. LOOPS & ITERATION -->
+        <h2>Loops & Iteration</h2>
+
+            <div class="demo-example">
+                <h4>Each Loop - Color Grid</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="color-grid" class="grid"></div>
+                    <button>
+                        <script type="text/act" act@click>
+                            #color-grid empty!;
+                            $colors: [
+                                #e74c3c 
+                                #3498db 
+                                #2ecc71 
+                                #f39c12 
+                                #9b59b6 
+                                #1abc9c 
+                                #e67e22 
+                                #34495e
+                            ].map: -> $c ($c as string);
+                            each $color in $colors do
+                                with new <div>, do
+                                    @class: card;
+                                    *background: $color;
+                                    << $color;
+                                    move_to: #color-grid;
+                                end;
+                            end;
+                        </script>
+                        Generate Color Grid
+                    </button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Generate Color Grid" act@click
+#color-grid empty!;
+$colors: [
+    #e74c3c #3498db #2ecc71 #f39c12 #9b59b6 #1abc9c #e67e22 #34495e
+].map: -&gt; $c ($c as string);
+each $color in $colors do
+    with new &lt;div&gt;, do
+        @class: card;
+        *background: $color;
+        &lt;&lt; $color;
+        move_to: #color-grid;
+    end;
+end;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>For Loop - Numbered List</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="number-list" class="output"></div>
+                    <button>
+                        <script type="text/act" act@click>
+                            #number-list empty!;
+                            for $i from 1 to 10 do
+                                #number-list append: `<div>{$i}. Item number {$i}</div>`;
+                                wait: 0.25s;
+                            end;
+                        </script>
+                        Generate 10 Items
+                    </button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Generate 10 Items" act@click
+#number-list empty!;
+for $i from 1 to 10 do
+    #number-list append: `&lt;div&gt;{$i}. Item number {$i}&lt;/div&gt;`;
+    wait: 0.25s;
+end;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Animated Loop</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="loop-counter" class="counter">0</div>
+                    <button id="start-loop">
+                        <script type="text/act" act@click>
+                            disabled: true;
+                            #stop-loop disabled: false;
+                            $count: 0;
+                            while :disabled (
+                                #loop-counter << $count;
+                                $count += 1;
+                                tick!;
+                            );
+                        </script>
+                        Start Loop
+                    </button>
+                    <button id="stop-loop" act@click="
+                        #start-loop disabled: false;
+                        disabled: true;
+                    " disabled>Stop Loop</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Start Loop" act@click
+disabled: true;
+#stop-loop disabled: false;
+$count: 0;
+while :disabled do
+    #loop-counter &lt;&lt; $count;
+    $count += 1;
+    tick!;
+end;</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Stop Loop" act@click
+#start-loop disabled: false;
+disabled: true;</code></div>
+                </div>
+            </div>
+
+        <h2>Conditional Logic</h2>
+
+            <div class="demo-example">
+                <h4>Input Validation</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <input type="text" id="validate-input" placeholder="Type at least 5 characters..." act@input="
+                            if :value.length < 5 (
+                                *border-color: #e74c3c;
+                                #validation-msg << `Too short! ({:value.length}/5 characters)`;
+                                #validation-msg *color: #e74c3c;
+                            ) else (
+                                *border-color: #2ecc71;
+                                #validation-msg << `Good! ({:value.length} characters)`;
+                                #validation-msg *color: #2ecc71;
+                            );
+                        ">
+                    <div id="validation-msg" class="output">Type something...</div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Input #validate-input act@input
+if :value.length &lt; 5 do
+    *border-color: #e74c3c;
+    #validation-msg &lt;&lt; `Too short! ({:value.length}/5 characters)`;
+    #validation-msg *color: #e74c3c;
+else
+    *border-color: #2ecc71;
+    #validation-msg &lt;&lt; `Good! ({:value.length} characters)`;
+    #validation-msg *color: #2ecc71;
+end;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Conditional Buttons</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <button act@click="
+                        #conditional-result if confirm: 'Do you like Act.js?', (
+                            << '🎉 Great! Act.js is awesome!';
+                            *background-color: #d4edda;
+                            *color: #155724;
+                        ) else (
+                            << '😢 We hope you give it another chance!';
+                            *background-color: #f8d7da;
+                            *color: #721c24;
+                        );
+                    ">Ask Question</button>
+                    <div id="conditional-result" class="output">Click the button above...</div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Ask Question" act@click
+#conditional-result if confirm: 'Do you like Act.js?', do
+    &lt;&lt; '🎉 Great! Act.js is awesome!';
+    *background-color: #d4edda;
+    *color: #155724;
+) else (
+    &lt;&lt; '😢 We hope you give it another chance!';
+    *background-color: #f8d7da;
+    *color: #721c24;
+);</code></div>
+                </div>
+            </div>
+
+        <h2>Interactive List</h2>
+
+            <div class="demo-example">
+                <h4>Click to Remove Items</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <ul id="item-list" class="item-list" act@click:target="
+                        confirm: `Remove {:inner_text}?`?
+                        collapse!: 300ms;
+                    ">
+                        <li>🍕 Pizza</li>
+                        <li>🍔 Burger</li>
+                        <li>🌮 Taco</li>
+                        <li>🍜 Ramen</li>
+                        <li>🥗 Salad</li>
+                    </ul>
+
+                    <button>
+                        <script type="text/act" act@click>
+                            $item_name: prompt: 'Enter item name:';
+                            not $item_name? stop;
+                            #item-list append: with new <li>, ( << $item_name );
+                        </script>
+                        Add Item
+                    </button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// List #item-list act@click:target
+confirm: `Remove {:inner_text}?`?
+collapse!: 300ms;</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Add Item" act@click
+$item_name: prompt: 'Enter item name:';
+not $item_name? stop;
+#item-list append: with new &lt;li&gt;, ( &lt;&lt; $item_name );</code></div>
+                </div>
+            </div>
+
+        <h2>Parallel vs Sequential Execution</h2>
+
+            <div class="demo-example">
+                <h4>Sequential (waits for each)</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div style="display: flex; gap: 1rem;">
+                        <div id="seq-box-1" class="box red">Box 1</div>
+                        <div id="seq-box-2" class="box green">Box 2</div>
+                        <div id="seq-box-3" class="box blue">Box 3</div>
+                    </div>
+                    <button act@click="
+                        #seq-box-1 transition: transform to 'scale(1.3)' in 500ms;
+                        #seq-box-2 transition: transform to 'scale(1.3)' in 500ms;
+                        #seq-box-3 transition: transform to 'scale(1.3)' in 500ms;
+                        wait: 500ms;
+                        #seq-box-1 transition: transform to 'scale(1)' in 500ms;
+                        #seq-box-2 transition: transform to 'scale(1)' in 500ms;
+                        #seq-box-3 transition: transform to 'scale(1)' in 500ms;
+                    ">Animate Sequential</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Animate Sequential" act@click
+#seq-box-1 transition: transform to 'scale(1.3)' in 500ms;
+#seq-box-2 transition: transform to 'scale(1.3)' in 500ms;
+#seq-box-3 transition: transform to 'scale(1.3)' in 500ms;
+wait: 500ms;
+#seq-box-1 transition: transform to 'scale(1)' in 500ms;
+#seq-box-2 transition: transform to 'scale(1)' in 500ms;
+#seq-box-3 transition: transform to 'scale(1)' in 500ms;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Parallel (all at once with &)</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div style="display: flex; gap: 1rem;">
+                        <div id="par-box-1" class="box red">Box 1</div>
+                        <div id="par-box-2" class="box green">Box 2</div>
+                        <div id="par-box-3" class="box blue">Box 3</div>
+                    </div>
+                    <button act@click="
+                        #par-box-1 transition: transform to 'scale(1.3)' in 500ms &
+                        #par-box-2 transition: transform to 'scale(1.3)' in 500ms &
+                        #par-box-3 transition: transform to 'scale(1.3)' in 500ms;
+                        wait: 500ms;
+                        #par-box-1 transition: transform to 'scale(1)' in 500ms &
+                        #par-box-2 transition: transform to 'scale(1)' in 500ms &
+                        #par-box-3 transition: transform to 'scale(1)' in 500ms;
+                    ">Animate Parallel</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Animate Parallel" act@click
+#par-box-1 transition: transform to 'scale(1.3)' in 500ms &amp;
+#par-box-2 transition: transform to 'scale(1.3)' in 500ms &amp;
+#par-box-3 transition: transform to 'scale(1.3)' in 500ms;
+wait: 500ms;
+#par-box-1 transition: transform to 'scale(1)' in 500ms &amp;
+#par-box-2 transition: transform to 'scale(1)' in 500ms &amp;
+#par-box-3 transition: transform to 'scale(1)' in 500ms;</code></div>
+                </div>
+            </div>
+
+        <h2>Act Blocks (Reusable Code)</h2>
+
+            <div class="demo-example">
+                <h4>Reusable Animation Block</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <script type="text/act" act-block="animate_box $color $duration">
+                        transition: 
+                            background-color to $color in $duration
+                            transform to 'rotate(360deg)' in $duration;
+                        transition: transform to 'rotate(0deg)' in $duration;
+                    </script>
+
+                    <div id="block-box" class="animated-box"></div>
+                    <div>
+                        <button act@click="#block-box run animate_box #e74c3c 1s">Red Animation</button>
+                        <button act@click="#block-box run animate_box #2ecc71 1s">Green Animation</button>
+                        <button act@click="#block-box run animate_box #f39c12 500ms">Fast Yellow</button>
+                    </div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Script act-block="animate_box $color $duration"
+transition:
+    background-color to $color in $duration
+    transform to 'rotate(360deg)' in $duration;
+transition: transform to 'rotate(0deg)' in $duration;</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Red Animation" act@click
+#block-box run animate_box #e74c3c 1s</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Green Animation" act@click
+#block-box run animate_box #2ecc71 1s</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Fast Yellow" act@click
+#block-box run animate_box #f39c12 500ms</code></div>
+                </div>
+            </div>
+
+        <h2>Advanced Features</h2>
+
+            <div class="demo-example">
+                <h4>Random Color Generator</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="random-box" class="box purple">Random!</div>
+                    <button act@click="
+                        $r: random: 0 255;
+                        $g: random: 0 255;
+                        $b: random: 0 255;
+                        #random-box transition: background-color to `rgb({$r}, {$g}, {$b})` in 500ms;
+                        #random-color-code << `rgb({$r}, {$g}, {$b})`;
+                    ">Generate Random Color</button>
+                    <div id="random-color-code" class="output">rgb(155, 89, 182)</div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Generate Random Color" act@click
+$r: random: 0 255;
+$g: random: 0 255;
+$b: random: 0 255;
+#random-box transition: background-color to `rgb({$r}, {$g}, {$b})` in 500ms;
+#random-color-code &lt;&lt; `rgb({$r}, {$g}, {$b})`;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>String Template Interpolation</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <button act@click="
+                        alert: `Current time is: { (new Date).to_locale_time_string! }`;
+                    ">Show Current Time</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Show Current Time" act@click
+alert: `Current time is: { (new Date).to_locale_time_string! }`;</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Class Toggles</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="toggle-class-box" class="box" style="border: 1px solid black;">Toggle Class</div>
+                    <button act@click="#toggle-class-box toggle: .red">Toggle Red Class</button>
+                    <button act@click="#toggle-class-box toggle: .green">Toggle Green Class</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Toggle Red Class" act@click
+#toggle-class-box toggle: .red</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Toggle Green Class" act@click
+#toggle-class-box toggle: .green</code></div>
+                </div>
+            </div>
+
+        <!-- NEW: DOM MANIPULATION -->
+        <h2>DOM Manipulation</h2>
+
+            <div class="demo-example">
+                <h4>Dynamic Element Creation</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="box-container" style="display: flex; gap: 1rem; flex-wrap: wrap;"></div>
+                    <button>
+                        <script type="text/act" act@click>
+                            $colors: ['#e74c3c' '#3498db' '#2ecc71' '#f39c12' '#9b59b6'];
+                            $random_color: $colors[ random: 0 ($colors.length - 1) ];
+                            
+                            with new <div>, do
+                                *display: inline-flex;
+                                *background-color: $random_color;
+                                add: .box;
+                                << 'New!';
+                                move_to: #box-container append;
+                            end;
+                        </script>
+                        Add Random Box
+                    </button>
+                    <button act@click="#box-container empty!">Clear All</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Add Random Box" act@click
+$colors: ['#e74c3c' '#3498db' '#2ecc71' '#f39c12' '#9b59b6'];
+$random_color: $colors[ random: 0 ($colors.length - 1) ];
+
+with new &lt;div&gt;, do
+    *display: inline-flex;
+    *background-color: $random_color;
+    add: .box;
+    &lt;&lt; 'New!';
+    move_to: #box-container append;
+end;</code></div>
+                    <div class="code-block"><code class="language-act">// Button "Clear All" act@click
+#box-container empty!</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Element Cloning</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div id="clone-source" class="box green">Clone Me!</div>
+                    <div id="clone-target" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;"></div>
+                    <button act@click="#clone-target append: #clone-source.clone_node: true">Clone Element</button>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Button "Clone Element" act@click
+#clone-target append: #clone-source.clone_node: true</code></div>
+                </div>
+            </div>
+
+        <!-- NEW: EVENT MODIFIERS -->
+        <h2>Event Modifiers & Targeting</h2>
+
+            <div class="demo-example">
+                <h4>Event Target Modifier</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <div style="display: flex; gap: 1rem;" act@click:target="*background-color: #f39c12">
+                        <div class="box red">Click Me 1</div>
+                        <div class="box blue">Click Me 2</div>
+                        <div class="box green">Click Me 3</div>
+                    </div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Parent div act@click:target
+*background-color: #f39c12</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Debounced Input</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <input type="text" placeholder="Type fast... (1 second debounce)"
+                        act@input="delay: 1s (#debounce-output << `Searched for: {:value}`)">
+                    <div id="debounce-output" class="output">Type something...</div>
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Input act@input
+delay: 1s (#debounce-output &lt;&lt; `Searched for: {:value}`)</code></div>
+                </div>
+            </div>
+
+            <div class="demo-example">
+                <h4>Keyboard Events</h4>
+                <div class="demo-panel">
+                    <div class="demo-panel-label">Demo</div>
+                    <input type="text" placeholder="Press Enter..." act@keydown.enter="alert: `You entered: {:value}`">
+                </div>
+                <div class="code-panel">
+                    <div class="demo-panel-label">Code</div>
+                    <div class="code-block"><code class="language-act">// Input act@keydown.enter
+alert: `You entered: {:value}`</code></div>
+                </div>
+            </div>
+    </div>
+
+    <script type="module">
+        // Shiki Syntax Highlighting with custom Act language support
+        import { createHighlighter } from 'https://esm.sh/shiki@3.20.0';
+
+        // Load the Act grammar
+        const actGrammar = await fetch('editors/textmate/Syntaxes/act.tmLanguage.json').then(r => r.json());
+
+        // Create highlighter with custom Act language
+        const highlighter = await createHighlighter({
+            themes: ['github-dark'],
+            langs: [{
+                ...actGrammar,
+                name: 'act',
+                scopeName: 'source.act'
+            }]
+        });
+
+        // Apply syntax highlighting to all code blocks
+        document.querySelectorAll('.code-block code.language-act').forEach(codeEl => {
+            const code = codeEl.textContent;
+            const parent = codeEl.parentElement;
+
+            const html = highlighter.codeToHtml(code, {
+                lang: 'act',
+                theme: 'github-dark'
+            });
+
+            parent.innerHTML = html;
+        });
+    </script>
+</body>
+
+</html>

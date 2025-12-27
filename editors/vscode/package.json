@@ -1,0 +1,58 @@
+{
+    "name": "act-language",
+    "displayName": "Act Language Support",
+    "description": "Syntax highlighting for the Act scripting language",
+    "version": "0.1.0",
+    "publisher": "act",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/oriolmrt/act.git"
+    },
+    "keywords": [
+        "act",
+        "scripting",
+        "syntax",
+        "highlighting",
+        "language"
+    ],
+    "engines": {
+        "vscode": "^1.60.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "act",
+                "aliases": [
+                    "Act",
+                    "act"
+                ],
+                "extensions": [
+                    ".act"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "act",
+                "scopeName": "source.act",
+                "path": "./syntaxes/act.tmLanguage.json"
+            },
+            {
+                "scopeName": "text.html.act",
+                "path": "./syntaxes/act-injection.json",
+                "injectTo": [
+                    "text.html.basic",
+                    "text.html.derivative"
+                ],
+                "embeddedLanguages": {
+                    "meta.embedded.block.act": "act"
+                }
+            }
+        ]
+    }
+}

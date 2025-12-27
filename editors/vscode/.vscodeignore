@@ -1,0 +1,19 @@
+# Build output
+**/*.vsix
+
+# Development files
+build.sh
+.DS_Store
+*.log
+node_modules/
+.vscode-test/
+
+# Documentation (already in root)
+INSTALL.md
+
+# Only include what's needed:
+# - package.json
+# - README.md
+# - LICENSE
+# - language-configuration.json
+# - syntaxes/

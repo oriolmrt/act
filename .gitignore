@@ -1,0 +1,7 @@
+minefield/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
