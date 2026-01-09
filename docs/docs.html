@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - act</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Pico CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.colors.min.css">
+    
+    <!-- Act.js -->
+    <script src="../act.js"></script>
+    
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Syntax highlighting -->
+    <script type="module">
+        import { createHighlighter } from 'https://esm.sh/shiki@3.20.0';
+        
+        const actGrammar = await fetch('https://cdn.jsdelivr.net/gh/oriolmrt/act@main/editors/textmate/Syntaxes/act.tmLanguage.json').then(r => r.json());
+        
+        const highlighter = await createHighlighter({
+            themes: ['github-dark'],
+            langs: [
+                'html',
+                { ...actGrammar, name: 'act', scopeName: 'source.act' }
+            ]
+        });
+        
+        // Highlight pure Act code blocks
+        document.querySelectorAll('code.lang-act').forEach(el => {
+            el.innerHTML = highlighter.codeToHtml(el.textContent, { lang: 'act', theme: 'github-dark' });
+        });
+        
+        // Highlight HTML code blocks with automatic Act detection
+        document.querySelectorAll('code.lang-html').forEach(el => {
+            let text = el.textContent;
+            const actParts = [];
+            
+            // Pattern 1: act="..." or act@*="..."
+            text = text.replace(/(act(?:@[\w:-]+)?=)(["'])(.*?)\2/g, (match, attr, quote, code) => {
+                const index = actParts.length;
+                actParts.push(code);
+                return `${attr}${quote}__ACT_${index}__${quote}`;
+            });
+            
+            // Pattern 2: script type="text/act" - build regex without HTML sequences
+            const scriptOpen = '<' + 'script';
+            const scriptClose = '</' + 'script' + '>';
+            const scriptPattern = new RegExp('(' + scriptOpen + '[^>]*type=["\']text/act["\'][^>]*>)([\\s\\S]*?)(' + scriptClose + ')', 'gi');
+            text = text.replace(scriptPattern, (match, open, code, close) => {
+                const index = actParts.length;
+                actParts.push(code);
+                return `${open}__ACT_${index}__${close}`;
+            });
+            
+            // Highlight HTML
+            let html = highlighter.codeToHtml(text, { lang: 'html', theme: 'github-dark' });
+            
+            // Replace placeholders with Act-highlighted code
+            actParts.forEach((code, index) => {
+                const actHtml = highlighter.codeToHtml(code, { lang: 'act', theme: 'github-dark' });
+                const match = actHtml.match(/<code[^>]*>([\s\S]*?)<\/code>/);
+                const inner = match ? match[1] : code;
+                html = html.replace(`__ACT_${index}__`, inner);
+            });
+            
+            el.innerHTML = html;
+        });
+    </script>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <ul>
+                <li>
+                    <a href="/" id="logo">
+                        <span id="logo-prev"> </span>act<span id="logo-next"> </span>
+                    </a>
+                    <script type="text/act">
+                        $symbols: [
+                            ' :' 
+                            '$ ' 
+                            ' !' 
+                            ': ' 
+                            ' ;' 
+                            '* ' 
+                            '()'
+                            '. ' 
+                            '[]'
+                            '@ ' 
+                            ' ?' 
+                            '{}' 
+                            '# '
+                        ];
+
+                        loop do
+                            $symbols each do
+                                #logo-prev fade: out & #logo-next fade: out;
+                                #logo-prev << me[0];
+                                #logo-next << me[1];
+                                #logo-prev fade: in & #logo-next fade: in;
+                                wait: 5s;
+                            end;
+                        end;
+                    </script>
+                </li>
+            </ul>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="docs.html"><strong>Docs</strong></a></li>
+                <li><a href="demo.html">Demo</a></li>
+                <li><a href="https://github.com/oriolmrt/act">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <div class="docs-layout">
+        <aside class="sidebar">
+            <details open>
+                <summary>Getting Started</summary>
+                <ul>
+                    <li><a href="#introduction" class="active">Introduction</a></li>
+                    <li><a href="#installation">Installation</a></li>
+                    <li><a href="#quick-start">Quick Start</a></li>
+                </ul>
+            </details>
+        </aside>
+
+        <main>
+            <h1>Introduction</h1>
+            <p>Act is a minimalistic inline scripting language for HTML. It allows you to add interactivity to your web pages without writing JavaScript.</p>
+            
+            <h2 id="installation">Installation</h2>
+            <p>Add the script to your HTML:</p>
+            <pre><code>&lt;script src="https://cdn.jsdelivr.net/gh/oriolmrt/act@main/act.js"&gt;&lt;/script&gt;</code></pre>
+
+            <h2 id="quick-start">Quick Start</h2>
+            <p>Add <code>act@</code> attributes to your HTML elements:</p>
+            <pre><code>&lt;button act@click="#message << 'Hello!'"&gt;Click me&lt;/button&gt;
+&lt;div id="message"&gt;&lt;/div&gt;</code></pre>
+        </main>
+    </div>
+
+    <footer class="container">
+        <p>MIT License © 2024</p>
+    </footer>
+</body>
+</html>

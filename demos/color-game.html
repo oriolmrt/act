@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Act test</title>
+    <script src="../act.js"></script>
+    <script>
+
+    </script>
+    <style>
+        html {
+            height: 100%;
+        }
+
+        body {
+            font-family: monospace, monospace;
+            font-size: large;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+            height: 100%;
+            box-sizing: border-box;
+        }
+
+        main {
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            margin: 0;
+            padding-top: 3rem;
+            padding-bottom: 1rem;
+            font-size: 3.5rem;
+            text-shadow: 3px 3px 1px black;
+        }
+
+        #clue {
+            display: flex;
+            width: 30rem;
+            justify-content: space-evenly;
+            margin: auto;
+            font-size: 2rem;
+        }
+
+        #clue div {
+            padding: 0.4rem 0.6rem;
+            background-color: #0009;
+            border-radius: 0.6rem;
+        }
+
+        #text {
+            font-size: 1.6rem;
+        }
+
+        #sliders {
+            font-size: 1.2rem;
+            margin-top: 3rem;
+        }
+
+        #red {
+            accent-color: red;
+        }
+
+        #green {
+            accent-color: green;
+        }
+
+        #blue {
+            accent-color: blue;
+        }
+
+        div.ruler,
+        div.slider {
+            align-items: center;
+            display: flex;
+            max-width: 40em;
+            margin: 0.5em auto;
+        }
+
+        div.ruler div {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding-left: 2.7rem;
+            padding-right: 0.3rem;
+        }
+
+        label {
+            padding-right: 1em;
+        }
+
+        input {
+            width: 100%;
+        }
+
+        footer {
+            display: flex;
+            align-self: center;
+            margin-top: 3rem;
+        }
+
+        button {
+            display: block;
+            padding: 0.2em 0.7em;
+            font-family: monospace, monospace;
+            font-size: 1.5rem;
+            background-color: #333;
+            width: 20rem;
+            height: 4rem;
+            border-radius: 15px;
+            margin: 0 1rem 0 1rem;
+        }
+
+        #attempts {
+            font-size: 1.2rem;
+            margin-top: 3rem;
+        }
+
+        #attempts ol {
+            width: 10rem;
+            margin: auto;
+        }
+
+        #attempts ol li {
+            padding-top: 0.25rem;
+            padding-bottom: 0.25rem;
+            background: #0009;
+            text-shadow: 1px 1px rgba(255, 255, 255, 0.2), -1px -1px 1px rgba(255, 255, 255, 0.2), 0px -1px 1px rgba(255, 255, 255, 0.2), -1px 0px 1px rgba(255, 255, 255, 0.2);
+        }
+
+        * {
+            color: white;
+            text-shadow: 1px 1px 3px black, -1px -1px 3px black, 0px 0px 5px black;
+        }
+    </style>
+</head>
+
+<body>
+    <main id="container" act="run start_game">
+        <script type="text/act" act-block="start_game">
+            local $cheats: document.location.search.includes: 'cheats';
+            local $game_over: false;
+            local $attempts: 1;
+            local $red: random: 0 15;
+            local $green: random: 0 15;
+            local $blue: random: 0 15;
+            local $hex_color: '#';
+            local $hex_guessed: '#';
+
+            #attempts-list empty!;
+            [$red $green $blue] each ($hex_color += to_string: 16);
+            
+            #container transition: background-color to $hex_color in 1s &
+            #submit fade: in &
+            
+            {.slider input} each do
+                value: 0;
+                disabled: false;
+            end;
+
+            run range_changed;
+            
+            #clue do
+                fade: out 100ms;
+                << #clue-tpl;
+                fade: in 100ms;
+            end;
+
+            $cheats? warn: 'Game initialized' $hex_color;
+        </script>
+        <script type="text/act" act-block="range_changed">
+            $hex_guessed: '#';
+            {.slider input} each ($hex_guessed += (:value as number then to_string: 16));
+            #submit-label << `The color is {$hex_guessed.to_upper_case!}`;
+        </script>
+        <header>
+            <h1>Guess My RGB</h1>
+            <div id="clue"></div>
+            <template id="clue-tpl">
+                <div><span id="attempt-emoji">#️⃣</span> <span id="attempt-number">1</span></div>
+                <div>🟥 <span id="clue-red">❔</span></div>
+                <div>🟩 <span id="clue-green">❔</span></div>
+                <div>🟦 <span id="clue-blue">❔</span></div>
+            </template>
+        </header>
+        <div id="sliders">
+            <div class="ruler">
+                <div>
+                    <script type="text/act" act>
+                        for $i to 15 do
+                            append: `<span>{($i.to_string: 16).to_upper_case!}</span>`;
+                        end;
+                    </script>
+                </div>
+            </div>
+            <div class="slider">
+                <label for="red" style="color: red;">🟥</label>
+                <input type="range" id="red" name="red" max="15" list="values" act@input="run range_changed">
+            </div>
+            <div class="slider">
+                <label for="green" style="color: green;">🟩</label>
+                <input type="range" id="green" name="green" max="15" list="values" act@input="run range_changed">
+            </div>
+            <div class="slider">
+                <label for="blue" style="color: blue;">🟦</label>
+                <input type="range" id="blue" name="blue" max="15" list="values" act@input="run range_changed">
+            </div>
+            <datalist id="values">
+                <script type="text/act" act>
+                    for $opt to 15 do
+                        append: `<option value="{$opt}" label="{$opt.to_string(16).to_upper_case!}"></option>`;
+                    end;
+                </script>
+            </datalist>
+        </div>
+        <footer>
+            <button id="restart">
+                <script type="text/act" act@click>
+                    if not $game_over and $attempts > 1 (
+                        confirm: 'Are you sure?' ? #container run start_game;
+                    ) else (
+                        #container run start_game;
+                    );
+                </script>
+                New color
+            </button>
+            <button id="submit">
+                <script type="text/act" act@click>
+                    $game_over? stop;
+                    lock!;
+
+                    with new <li>, do
+                        << $hex_guessed.to_upper_case!;
+                        *color: $hex_guessed;
+                        move_to: #attempts-list append;
+                    end;
+
+                    #clue fade: out;
+
+                    [red green blue] each do
+                        $guessed: me as id then :value as number;
+                        $color: me as variable;
+
+                        `clue-{me}` as id << if $color is $guessed (
+                            me as id then disabled: true;
+                            '✅';
+                        ) else if $guessed > $color '⬇️' else '⬆️';
+                    end;
+
+                    #clue fade: in;
+
+                    $cheats? warn: $attempts $hex_color $hex_guessed ($hex_color is $hex_guessed) $game_over;
+
+                    if $hex_color is $hex_guessed (
+                        $game_over: true;
+                        #restart focus!;
+
+                        #attempt-emoji do
+                            fade: out 100ms;
+                            << '🏆';
+                            fade: in 100ms;
+                        end &
+                        
+                        #restart while $game_over do
+                            transition: 
+                                scale to 0.8 in 1s
+                                background-color to white in 1s
+                                color to black in 1s;
+                            transition: 
+                                scale to 1 in 1s
+                                background-color to #333 in 1s
+                                color to white in 1s;
+                        end &
+
+                        fade: out;
+                    ) else (
+                        #attempt-number do
+                            fade: out 100ms;
+                            $attempts += 1;
+                            << $attempts;
+                            fade: in 100ms;
+                        end;
+                    );
+
+                    $cheats? warn: $attempts $hex_color $hex_guessed $game_over;
+                    unlock!;
+                </script>
+                <span id="submit-label">Submit</span>
+            </button>
+        </footer>
+        <div id="attempts">
+            <ol id="attempts-list"></ol>
+        </div>
+    </main>
+</body>
+
+</html>

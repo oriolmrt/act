@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Act Tests</title>
-    <script src="act.js"></script>
+    <script src="../act.js"></script>
     <style>
         * {
             margin: 0;
@@ -1220,11 +1220,111 @@
                     </div>
                 </div>
 
+            </div>
+        </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- KEYWORDS - EVENTS -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">
+                Keywords - Events
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="on-basic">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>on-basic</code> on keyword basic</div>
+                    <div data-target data-e="clicked">
+                        <script type="text/act" act>
+                            on click (@r: 'clicked');
+                            click!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="on-target-option">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>on-target-option</code> on with target option</div>
+                    <div data-target data-e="BUTTON" id="on-target-container">
+                        <button style="display:none" id="on-target-btn"></button>
+                        <script type="text/act" act>
+                            on click target do
+                                {< [data-target]}.@r: :tag_name;
+                            end;
+                            #on-target-btn click!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="on-matching">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>on-matching</code> on with matching (delegation)</div>
+                    <div data-target data-e="matched" id="on-matching-container">
+                        <span class="match-me" style="display:none" id="on-matching-el"></span>
+                        <script type="text/act" act>
+                            on click matching {.match-me} do
+                                {< [data-target]}.@r: 'matched';
+                            end;
+                            #on-matching-el click!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="on-aliased">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>on-aliased</code> on with aliased event</div>
+                    <div data-target data-e="aliased">
+                        <script type="text/act" act>
+                            on [my_event: click] (@r: 'aliased');
+                            click!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="on-once-option">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>on-once-option</code> on with once option</div>
+                    <div data-target data-e="1" id="on-once-target">
+                        <script type="text/act" act>
+                            local $count: 0;
+                            on click once do
+                                $count += 1;
+                                @r: $count;
+                            end;
+                            click!;
+                            click!;
+                            click!;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="on-combined">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>on-combined</code> on with target + matching</div>
+                    <div data-target data-e="SPAN" id="on-combined-container">
+                        <span class="target-me" style="display:none" id="on-combined-el"></span>
+                        <script type="text/act" act>
+                            on click target matching {.target-me} do
+                                {< [data-target]}.@r: :tag_name;
+                            end;
+                            #on-combined-el click!;
+                        </script>
+                    </div>
+                </div>
+
+            </div>
+        </details>
+
         <!-- ═══════════════════════════════════════════════════════════════ -->
         <!-- BLOCKS (DEF/RUN) -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
-            </div>
-        </details>
         <details class="test-group" open>
             <summary class="group">
                 Blocks (def/run)
@@ -1510,7 +1610,7 @@
                     <div data-target data-e="delayed">
                         <script type="text/act" act>
                             @r: 'not-delayed';
-                            delay: 50ms (@r: 'delayed');
+                            delay 50ms (@r: 'delayed');
                         </script>
                     </div>
                 </div>

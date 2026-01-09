@@ -33,7 +33,9 @@
         return key;
     };
 
-    const regexEscape = (str) => { return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); };
+    const regexEscape = (str) => { 
+        return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); 
+    };
 
     // LIBRARY (Built-in functions)
 
@@ -127,11 +129,7 @@
         },
     };
 
-    const throwSignal = async (Signal, ctx, target, opts, data) => {
-        const signal = new Signal;
-        if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
-        throw signal;
-    };
+
 
     Library.keywords = {
         async run(ctx, target, opts, [name, ...args]) {
@@ -255,15 +253,52 @@
             catch (e) { return new window[value.toString()](...args); }
         },
 
-        async on(ctx, target, opts, [eventName, ...args]) {
+        async on(ctx, target, opts, [eventNameOrAlias, ...args]) {
             target = await ctx.asValueOf(target);
-            eventName = Binder.eventName(await ctx.asString(eventName, target));
-            let options = {};
-            if (is(args[0], ActObject)) options = await ctx.asValueOf(args[0], target);
+            let eventName, alias;
 
-            const binding = Binder.from(target, true), eventScope = args.at(-1);
-            const eventManager = new EventManager(binding, eventName, options, eventScope.source, eventScope);
-            binding.addEvent(eventName, eventScope.source, options, eventManager);
+            if (is(eventNameOrAlias, ActObject)) {
+                const obj = await ctx.asValueOf(eventNameOrAlias, target);
+                const keys = Object.keys(obj);
+                alias = keys[0];
+                eventName = Binder.eventName(obj[alias].toString());
+            } else {
+                eventName = Binder.eventName(await ctx.asString(eventNameOrAlias, target));
+            }
+
+            let options = {}, matchingSelector = null;
+            const eventScope = args.at(-1);
+
+            for (let i = 0; i < args.length - 1; i++) {
+                const arg = args[i];
+
+                if (is(arg, Word)) {
+                    const argValue = arg.value;
+                    if (argValue === 'matching') {
+                        matchingSelector = await ctx.asString(args[++i], target);
+                    } else {
+                        options[argValue] = true;
+                    }
+                } else if (is(arg, ActObject)) {
+                    Object.assign(options, await ctx.asValueOf(arg, target));
+                }
+            }
+
+            const binding = Binder.from(target, true);
+            const em = new EventManager(binding, eventName, options, eventScope.source, eventScope);
+
+            if (matchingSelector) em.listener = (e) => {
+                let el = e.target;
+                while (el && el !== target) {
+                    if (el.matches(matchingSelector)) return em.run(el, e);
+                    el = el.parentElement;
+                }
+                if (target.matches(matchingSelector) && el === target) return em.run(target, e);
+            };
+
+            if (alias) em.alias = alias;
+
+            binding.addEvent(eventName, eventScope.source, options, em);
             return true;
         },
 
@@ -293,16 +328,22 @@
             return false;
         },
 
-        break(ctx, target, opts, [data]) {
-            return throwSignal(Signal.Break, ctx, target, opts, data);
+        async break(ctx, target, opts, [data]) {
+            const signal = new Signal.Break;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
         },
 
-        stop(ctx, target, opts, [data]) {
-            return throwSignal(Signal.Stop, ctx, target, opts, data);
+        async stop(ctx, target, opts, [data]) {
+            const signal = new Signal.Stop;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
         },
 
-        return(ctx, target, opts, [data]) {
-            return throwSignal(Signal.Return, ctx, target, opts, data);
+        async return(ctx, target, opts, [data]) {
+            const signal = new Signal.Return;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
         },
 
         repeat() {
@@ -343,6 +384,48 @@
             await ctx.solve(body, unwrap(withTarget), opts);
             return withTarget;
         },
+
+        async delay(ctx, target, opts, [time, scope]) {
+            clearTimeout(scope.__delayTimeout__ || 0);
+            const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
+
+            return new Promise(resolve => {
+                scope.__delayTimeout__ = setTimeout(async () => {
+                    resolve(await ctx.solve(scope, target, opts));
+                    delete scope.__delayTimeout__;
+                }, ms);
+            });
+        },
+
+        async lock(ctx, target, opts, args) {
+            if (args.length === 0) return ctx.eventManager.lock = true;
+            const arg0 = await ctx.asValueOf(args[0], target);
+            if (typeof arg0 === 'boolean') return ctx.eventManager.lock = arg0;
+
+            const binding = Binder.from(target);
+            if (!binding) return null;
+            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
+            if (!em) return null;
+
+            em.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
+            return true;
+        },
+
+        async unlock(ctx, target, opts, args) {
+            if (args.length === 0) return !(ctx.eventManager.lock = false);
+            const binding = Binder.from(target);
+            if (!binding) return null;
+            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
+            if (em) em.lock = false;
+            return true;
+        },
+
+        async is_locked(ctx, target, opts, args) {
+            if (args.length === 0) return ctx.eventManager.lock;
+            const binding = Binder.from(target);
+            if (!binding) return null;
+            return binding.events[Binder.eventName(await ctx.asString(args[0], target))]?.lock;
+        },
     };
 
     Library.globals = {
@@ -368,7 +451,9 @@
             await new Promise(r => requestAnimationFrame(r));
         },
 
-        wait(time) { return new Promise(r => setTimeout(r, Library.globals.time_to_ms(time))); },
+        wait(time) { 
+            return new Promise(r => setTimeout(r, Library.globals.time_to_ms(time))); 
+        },
 
         log_raw: (...args) => console.log(...args),
         log: (...args) => console.log(...unwrapAll(args)),
@@ -386,48 +471,6 @@
             const rand = Math.random() * (max - min + 1) + min;
             return (min % 1 + max % 1 == 0) ? Math.floor(rand) : rand;
         },
-
-        delay: Library.method(async function (ctx, target, opts, time, scope) {
-            clearTimeout(scope.__delayTimeout__ || 0);
-            const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
-
-            return new Promise(resolve => {
-                scope.__delayTimeout__ = setTimeout(async () => {
-                    resolve(await ctx.solve(scope, target, opts));
-                    delete scope.__delayTimeout__;
-                }, ms);
-            });
-        }),
-
-        lock: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return ctx.eventManager.lock = true;
-            const arg0 = await ctx.asValueOf(args[0], target);
-            if (typeof arg0 === 'boolean') return ctx.eventManager.lock = arg0;
-
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
-            if (!em) return null;
-
-            em.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
-            return true;
-        }),
-
-        unlock: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return !(ctx.eventManager.lock = false);
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
-            if (em) em.lock = false;
-            return true;
-        }),
-
-        is_locked: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return ctx.eventManager.lock;
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            return binding.events[Binder.eventName(await ctx.asString(args[0], target))]?.lock;
-        }),
     };
 
     Library.Array = (function () {
@@ -465,7 +508,7 @@
         };
     })();
 
-    const extractActValue = (source) => {
+    const classifyValue = (source) => {
         const val = from(through(source)), isClass = is(val, ActClass), isAttribute = is(val, Attribute);
         return { isClass, isAttribute, name: (isClass || isAttribute) ? val.value : (unwrap(source) ?? '').toString() };
     };
@@ -575,6 +618,10 @@
             this.replaceChildren();
         },
 
+        clone() {
+            return this.cloneNode(true);
+        },
+
         prepend(c) {
             return insertContent(this, c, 'afterbegin');
         },
@@ -592,15 +639,16 @@
             });
         },
 
-        remove: Library.method(async function (ctx, target, opts, ...args) {
-            for (const value of args) {
-                if (value === undefined) return target.parentNode?.removeChild(target);
-                if (is(value, ActClass)) target.classList.remove(value.value.slice(1));
-                else if (is(value, Attribute)) target.removeAttribute(value.value);
-            }
+        remove(...args) {
+            if (args.length === 0) return this.parentNode?.removeChild(this);
 
-            return target;
-        }),
+            for (const value of args) {
+                const { isClass, isAttribute, name } = classifyValue(value);
+                if (isClass) this.classList.remove(name.slice(1));
+                else if (isAttribute) this.removeAttribute(name);
+            }
+            return this;
+        },
 
         collapse(time = 250, timing = 'linear') {
             const style = window.getComputedStyle(this), h = this.offsetHeight;
@@ -629,28 +677,9 @@
             return this.parentNode;
         },
 
-        on_match: Library.method(async function (ctx, target, opts, eventName, selector, scope) {
-            eventName = Binder.eventName(await ctx.asString(eventName, target));
-            selector = await ctx.asString(selector, target);
-            const binding = Binder.from(target, true);
-            const em = new EventManager(binding, eventName, {}, scope.source, scope);
-
-            em.listener = (e) => {
-                let el = e.target;
-                while (el && el !== target) {
-                    if (el.matches(selector)) return em.run(el, e);
-                    el = el.parentElement;
-                }
-                if (target.matches(selector) && el === target) return em.run(target, e);
-            };
-
-            binding.addEvent(eventName, scope.source, {}, em);
-            return true;
-        }),
-
         take(attrOrCls, sel) {
             const els = sel ? (is(unwrap(sel), NodeList) ? unwrap(sel) : [unwrap(sel)]) : [...(this.parentNode?.children || [])].filter(c => c !== this);
-            const { isClass, isAttribute, name } = extractActValue(attrOrCls);
+            const { isClass, isAttribute, name } = classifyValue(attrOrCls);
             els.forEach(el => {
                 if (isAttribute && el.hasAttribute(name)) { this.setAttribute(name, el.getAttribute(name)); el.removeAttribute(name); }
                 if (isClass && el.classList.contains(name.slice(1))) { this.classList.add(name.slice(1)); el.classList.remove(name.slice(1)); }
@@ -658,34 +687,35 @@
             return this;
         },
 
-        toggle: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return (target.style.display === 'none') ? Library.Element.show.call(target) : Library.Element.hide.call(target);
-            const [value, force] = args;
-            const solved = await ctx.solve(value, target);
-            const { isClass, isAttribute, name } = extractActValue(solved);
-            let solvedForce = force ? unwrap(await ctx.solve(force, target)) : undefined;
-
-            if (isClass) return target.classList.toggle(name.slice(1), solvedForce);
-            if (isAttribute) return target.toggleAttribute(name, solvedForce);
-            if (solvedForce !== undefined) return solvedForce ? Library.Element.show.call(target) : Library.Element.hide.call(target);
-            return (target.style.display === 'none') ? Library.Element.show.call(target) : Library.Element.hide.call(target);
-        }),
-
-        add: Library.method(async function (ctx, target, opts, ...args) {
-            for (const value of args) {
-                if (is(value, ActClass)) target.classList.add(value.value.slice(1));
-                else if (is(value, Attribute)) target.setAttribute(value.value, '');
+        toggle(value, force) {
+            if (value === undefined) {
+                return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
             }
 
-            return target;
-        }),
+            const { isClass, isAttribute, name } = classifyValue(value);
+            const solvedForce = force !== undefined ? unwrap(force) : undefined;
 
-        has: Library.method(async function (ctx, target, opts, value) {
-            const { isClass, isAttribute, name } = extractActValue(await ctx.solve(value, target));
-            if (isClass) return target.classList.contains(name.slice(1));
-            if (isAttribute) return target.hasAttribute(name);
-            return target.matches(name);
-        }),
+            if (isClass) return this.classList.toggle(name.slice(1), solvedForce);
+            if (isAttribute) return this.toggleAttribute(name, solvedForce);
+            if (solvedForce !== undefined) return solvedForce ? Library.Element.show.call(this) : Library.Element.hide.call(this);
+            return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
+        },
+
+        add(...args) {
+            for (const value of args) {
+                const { isClass, isAttribute, name } = classifyValue(value);
+                if (isClass) this.classList.add(name.slice(1));
+                else if (isAttribute) this.setAttribute(name, '');
+            }
+            return this;
+        },
+
+        has(value) {
+            const { isClass, isAttribute, name } = classifyValue(value);
+            if (isClass) return this.classList.contains(name.slice(1));
+            if (isAttribute) return this.hasAttribute(name);
+            return this.matches(name);
+        },
     };
 
     Library.function = {};
@@ -714,17 +744,22 @@
             const i = self.indexOf(s);
             return i === -1 ? self : self.substring(i + s.length);
         },
+
         before(str) {
             const [self, s] = [this.toString(), str.toString()];
             const i = self.indexOf(s);
             return i === -1 ? self : self.substring(0, i);
         },
+
         between(start, end) {
             const [self, s, e] = [this.toString(), start.toString(), end.toString()];
             const i = self.indexOf(s);
             return i === -1 ? self : self.substring(i + s.length, self.indexOf(e));
         },
-        capitalize() { return this.toString().charAt(0).toUpperCase() + this.toString().slice(1); },
+
+        capitalize() { 
+            return this.toString().charAt(0).toUpperCase() + this.toString().slice(1); 
+        },
     };
 
     Library.symbol = {};
@@ -795,12 +830,6 @@
         }
     }
 
-    class IdResult extends ComplexResult {
-        get value() {
-            return document.getElementById(this._value.slice(1));
-        }
-    }
-
     class SelectorResult extends ComplexResult {
         get value() {
             if (this.mode === 'closest') return this.parent.closest(this._value);
@@ -813,6 +842,12 @@
 
         valueOf() {
             return this.value;
+        }
+    }
+
+    class IdResult extends SelectorResult {
+        get value() {
+            return document.getElementById(this._value.slice(1));
         }
     }
 
@@ -1723,7 +1758,7 @@
             ['string', /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/],
             ['url', /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{2,256}\.[a-z]{2,63}\b[-a-zA-Z0-9@:%_+.~#?&\/=]*/],
             ['comment', /\/\*[\s\S]*?\*\/|\/\/.*/],
-            ['insert', /(?:^|\s+)<<\s+/],
+            ['insert', /(?:^|\s+)?<<\s*/],
             ['operator', RegExp(Object.keys(this.OPERATORS).map(r => '\\s+' + regexEscape(r) + '\\s+').join('|'))],
             ['space', /\s+/],
             ['lparen', /\(/],
@@ -1991,6 +2026,7 @@
 
         parseExpression(scope, skip = []) {
             let l;
+            this.lexer.fwd();
 
             if (this.lexer.tokenIsValue()) {
                 l = this.parseValue(scope);
@@ -2400,7 +2436,7 @@
                 if (codeLines.length - (e.token.line) > 1) logArgs.push(codeLines[e.token.line], '\n');
 
                 console.error(...logArgs);
-                throw e;
+                this.scope = null;
             }
         }
     }
@@ -2428,13 +2464,14 @@
         },
 
         eventName(name) {
-            if (Object.keys(Binder.INTERSECT_EVENTS).includes(name)) { return Binder.INTERSECT_EVENTS[name]; }
-
+            if (Object.keys(Binder.INTERSECT_EVENTS).includes(name)) return Binder.INTERSECT_EVENTS[name];
             return name;
         },
 
         bind(element) {
-            if (is(element, HTMLScriptElement) && element.attributes.type?.value == 'text/act') { return this.bindScript(element); }
+            if (is(element, HTMLScriptElement) && element.attributes.type?.value == 'text/act') { 
+                return this.bindScript(element); 
+            }
 
             const binding = this.from(element, true);
             this.bindAttributes(element, binding);
@@ -2486,13 +2523,21 @@
         bindEvents(binding, source) {
             source.attr.name.replace('act@', '').split(',').forEach(evt => {
                 const opts = {};
-                this.EVENT_OPTIONS.forEach(o => { if (evt.includes(':' + o)) { opts[o] = true; evt = evt.replace(':' + o, ''); } });
+                this.EVENT_OPTIONS.forEach(eo => { 
+                    if (evt.includes(':' + eo)) { 
+                        opts[eo] = true; 
+                        evt = evt.replace(':' + eo, ''); 
+                    } 
+                });
 
                 let match, alias = null;
-                if (match = evt.match(/\[(.*?)\](.*)/)) { alias = match[1]; evt = match[2]; }
+                if (match = evt.match(/\[(.*?)\](.*)/)) {
+                    alias = match[1]; 
+                    evt = match[2];
+                }
 
                 const [name, ...mods] = evt.split('.');
-                if (mods.length) opts.modifiers = mods;
+                if (mods.length) opts.modifiers = mods.map(m => m.toLowerCase());
 
                 binding.addEvent(name, source, opts, null, alias);
             });
@@ -2606,7 +2651,7 @@
             this.contexts = new Set;
 
             this.listener = (ev) => {
-                const mods = this.options.modifiers?.map(m => m.toLowerCase());
+                const mods = this.options.modifiers;
                 if (mods) {
                     if (['shift', 'ctrl', 'alt', 'meta'].some(k => (mods.includes(k) || (k === 'ctrl' && mods.includes('control'))) && !ev[k + 'Key'])) return;
                     const keys = mods.filter(m => !['shift', 'ctrl', 'control', 'alt', 'meta'].includes(m));
@@ -2778,7 +2823,10 @@
         configure() {
             const meta = document.querySelectorAll('meta[name="act-config"]');
             const conf = {};
-            for (const m of meta) { const [k, v] = m.content.split(':'); conf[k.trim()] = JSON.parse(v.trim()); }
+            for (const m of meta) { 
+                const [k, v] = m.content.split(':'); 
+                conf[k.trim()] = JSON.parse(v.trim()); 
+            }
             Object.assign(this.config, conf, window.__actConfig || {});
             if (this.config.debugLexer) Lexer.debug = true;
             if (this.config.debugParser) Parser.debug = true;

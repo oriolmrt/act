@@ -1451,27 +1451,59 @@ Adds an event listener to the target element.
 
 Arguments:
 
-- `(event name: Word) (body: Scope)`
-- `(event name: Word) (options: Object) (body: Scope)`
+- `(event name: Word) (body: Scope)` — basic event binding
+- `(event name: Word) (options: Object) (body: Scope)` — with options object
+- `(event name: Word) [...options: Word] (body: Scope)` — with single-word options
+- `(event name: Word) [...options: Word] matching (selector) (body: Scope)` — event delegation
+- `([alias name: event name]: Object) [...options: Word] [matching (selector)] (body: Scope)` — aliased event
+
+**Single-word options:** Any word before the scope becomes `options[word] = true`. Common options:
+- `target` — handler receives `event.target` as `me` instead of the bound element
+- `once` — handler fires only once
+- `capture`, `passive`, `prevent`, `stop` — standard event options
 
 Examples:
 
 ```act
+// Basic event
 #some-element on click (
     log: 'Clicked!';
 );
 
-#some-element on custom-event (
-    log: 'custom-event was triggered!';
+// With single-word options
+#some-element on click target once (
+    log: 'Clicked on:' me;
 );
 
-// With options
+// Event delegation with matching
+#some-list on click matching {.item} (
+    log: 'Item clicked!';
+    *color: red;
+);
+
+// Aliased event
+#some-element on [myClick: click] (
+    log: 'Aliased click!';
+);
+
+// Combined: alias + options + matching
+#container on [itemClick: click] target matching {button.active} (
+    log: 'Active button clicked:' :inner_text;
+);
+
+// With options object
 #some-element on scroll [passive: true] (
     log: 'Scrolling...';
 );
 
-#some-element on click [once: true] (
-    log: 'Only fires once!';
+// With modifiers - only trigger on Ctrl+Click
+#some-element on click [modifiers: ['ctrl']] (
+    log: 'Ctrl+Click detected!';
+);
+
+// Combined: modifiers with single-word options
+#some-element on click target [modifiers: ['ctrl' 'shift']] (
+    log: 'Ctrl+Shift+Click on:' :tag_name;
 );
 ```
 
@@ -1626,6 +1658,67 @@ $validate: -> $name (
     // ...
     return 'John not found';
 );
+```
+
+#### `delay`
+
+Executes a scope or expression with **debounce**, specifying the time delay as the first argument.
+
+Arguments:
+`(duration: dimension) (scope: Scope)`
+
+Examples:
+
+```act
+delay 500ms ( log: 'Debounced' );
+```
+
+#### `lock`
+
+Locks the current scope or a specific event, preventing further evaluations until it is unlocked.
+
+Arguments:
+
+- No arguments: Locks the current event scope
+- `(boolean)`: Sets lock state for current event scope
+- `(event name)`: Locks a specific event on the target element
+- `(event name, boolean)`: Sets lock state for specific event
+
+Examples:
+
+```act
+lock;
+lock click;
+lock scroll false;
+```
+
+#### `unlock`
+
+Unlocks the current scope or a specific event, allowing further evaluations.
+
+Arguments:
+`[event: string]`
+
+Examples:
+
+```act
+unlock;
+unlock click;
+```
+
+#### `is_locked`
+
+Checks if the event execution is locked.
+
+Arguments:
+`[event: string]`
+
+Returns `true` if the event is locked, `false` otherwise.
+
+Examples:
+
+```act
+is_locked? log: 'Locked';
 ```
 
 ## Act Library
@@ -1949,22 +2042,6 @@ Examples:
 
 #some-element take: .selected .item;
 // Takes 'selected' class from all '.item' elements
-```
-
-#### `on_match`
-
-Sets up event delegation - listens for events on the target but only handles them when they match a selector.
-
-Arguments:
-`(event name) (selector) (scope)`
-
-Examples:
-
-```act
-#some-list on_match: click .item (
-    log: 'Item clicked!';
-    me *color: red;
-);
 ```
 
 #### `fade`
@@ -2301,65 +2378,6 @@ Examples:
 log_raw: $result;
 ```
 
-#### `delay`
-
-Executes a scope or expression with **debounce**, specifying the time delay as the first argument.
-
-Arguments:
-`(duration: dimension) (scope: Scope)`
-
-Examples:
-
-```act
-delay: 500ms ( log: 'Debounced' );
-```
-
-#### `lock`
-
-Locks the current scope or a specific event, preventing further evaluations until it is unlocked.
-
-Arguments:
-
-- No arguments: Locks the current event scope
-- `(boolean)`: Sets lock state for current event scope
-- `(event name)`: Locks a specific event on the target element
-- `(event name, boolean)`: Sets lock state for specific event
-
-Examples:
-
-```act
-lock!;
-lock: click;
-lock: scroll false;
-```
-
-#### `unlock`
-
-Unlocks the current scope or a specific event, allowing further evaluations.
-
-Arguments:
-`[event: string]`
-
-Examples:
-
-```act
-unlock!;
-unlock: click;
-```
-
-#### `is_locked`
-
-Checks if the event execution is locked.
-
-Arguments:
-`[event: string]`
-
-Examples:
-
-```act
-is_locked! ? log: 'Locked';
-```
-
 ### Window Functions
 
 If the specified name does not match any property, Library method or target method, it will be called from the global `window` object.
@@ -2578,27 +2596,27 @@ Multiple event modifiers can be added to the same event:
 
 ### Key Modifiers
 
-For keyboard events (like `keyup`, `keydown`) and mouse events, you can filter the event by appending specific keys or modifier keys using **dots** `.`:
+For keyboard events (like `keyup`, `keydown`) and mouse events, you can filter the event by appending specific keys or modifier keys using **dots** `.`. Modifiers are case-insensitive (converted to lowercase internally):
 
 | Modifier | Description | Example |
 | --- | --- | --- |
-| `.Key` | Triggers only when the specified key is pressed (case-insensitive). Works with any key name (e.g., `Enter`, `Escape`, `a`, `z`). | `act@keyup.Enter`, `act@keydown.Escape` |
-| `.Modifier` | Requires specific modifier keys (Shift, Ctrl, Alt, Meta) to be pressed. | `act@click.Shift`, `act@keydown.Ctrl.s` |
+| `.key` | Triggers only when the specified key is pressed. Works with any key name (e.g., `enter`, `escape`, `a`, `z`). | `act@keyup.enter`, `act@keydown.escape` |
+| `.modifier` | Requires specific modifier keys (shift, ctrl, alt, meta) to be pressed. | `act@click.shift`, `act@keydown.ctrl.s` |
 
 You can chain multiple modifiers to create complex key combinations:
 
 ```html
 <!-- Trigger only on Enter key -->
-<input act@keyup.Enter="submit!">
+<input act@keyup.enter="submit!">
 
 <!-- Trigger on Shift + Enter -->
-<textarea act@keyup.Shift.Enter="new_line!"></textarea>
+<textarea act@keyup.shift.enter="new_line!"></textarea>
 
 <!-- Trigger on Ctrl + S -->
-<div act@keydown.Ctrl.s="save!">Save</div>
+<div act@keydown.ctrl.s="save!">Save</div>
 
 <!-- Shift-click to delete -->
-<button act@click.Shift="delete!">Delete (Shift-Click)</button>
+<button act@click.shift="delete!">Delete (Shift-Click)</button>
 ```
 
 ### Event Aliases
@@ -2720,27 +2738,6 @@ Then you can use it in your code:
 </button>
 ```
 
-### Lazy evaluation
-
-By default, library methods receive their arguments already solved.
-If you want to handle the solving yourself (e.g. for conditional evaluation or custom solving logic), wrap your function with `Library.method()`.
-
-The wrapped function receives the same arguments as [Keyword operations](#extending-keyword-operations): `(ctx, target, opts, ...args)`.
-Note that `this` is bound to the target, similar to regular library methods.
-
-```js
-Act.Library.globals.my_lazy_method = Act.Library.method(async function(ctx, target, opts, arg1, arg2) {
-    // arg1 and arg2 are unevaluated Solvables
-    // You can use ctx.solve() here, check the Results and Solving section for more details.
-    if (someCondition) {
-        return await ctx.solve(arg1, target, opts);
-    }
-    return null;
-});
-```
-
-For more details on how to handle unevaluated arguments, check the [Results and Solving](#results-and-solving) section.
-
 ### Extending keyword operations
 
 > [!WARNING]
@@ -2748,13 +2745,13 @@ For more details on how to handle unevaluated arguments, check the [Results and 
 > The parser needs to know about them before it can parse those operations properly.
 
 > [!TIP]
-> You need to disable the `start` configuration option in [configuration](#configuration) to prevent Act from automatically starting. Add your keyword operations to `Act.Library.keywords` and then manually call `Act.start()`.
+> You need to disable the `start` configuration option in the [configuration](#configuration) to prevent Act from automatically starting. Add your keyword operations to `Act.Library.keywords` and then manually call `Act.start()`.
 
 You can extend the library by adding your own [keyword operations](#keywords).
 All keyword operation methods are **async functions** that receive the following arguments:
 
 - `this` - is bound to the **KeywordExpression solvable**
-- `ctx` - the **context** object with solving methods
+- `ctx` - the execution **context** object with solving methods
 - `target` - the **target** of the operation
 - `opts` - options object
 - `args` - the **unevaluated arguments** of the operation (Act values, not Results nor JavaScript values)
@@ -2767,13 +2764,15 @@ Act.Library.keywords.add_cow_variable = async function(ctx, target, opts, args) 
 
 Act.Library.keywords.wait_more = async function(ctx, target, opts, args) {
     const {wait, time_to_ms} = Act.Library.globals;
-    if (args[0] === undefined) 
+    if (args[0] === undefined) {
         return await wait.call(target, '60s');
+    }
 
     const solvedArg = await ctx.solve(args[0], target, opts);
 
-    if (['ms', 's', 'm', 'h'].includes(solvedArg.unit))
+    if (['ms', 's', 'm', 'h'].includes(solvedArg.unit)) {
         return await wait.call(target, time_to_ms.call(target, solvedArg.value) * 10);
+    }
 
     throw new Error('The argument is not a dimension or it has an invalid unit');
 };

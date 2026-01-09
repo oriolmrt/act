@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>act - A scripting language for HTML</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Pico CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.jade.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.colors.min.css">
+    
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Act.js -->
+    <script src="../act.js"></script>
+    
+    <!-- Syntax highlighting -->
+    <script type="module">
+        import { createHighlighter } from 'https://esm.sh/shiki@3.20.0';
+        
+        const actGrammar = await fetch('https://cdn.jsdelivr.net/gh/oriolmrt/act@main/editors/textmate/Syntaxes/act.tmLanguage.json').then(r => r.json());
+        
+        const highlighter = await createHighlighter({
+            themes: ['github-dark'],
+            langs: ['html', { ...actGrammar, name: 'act', scopeName: 'source.act' }],
+        });
+        
+        function highlightCode(el) {
+            if (el.classList.contains('lang-act')) {
+                el.innerHTML = highlighter.codeToHtml(el.textContent, { lang: 'act', theme: 'github-dark' });
+            } else if (el.classList.contains('lang-html')) {
+                let text = el.textContent;
+                const actParts = [];
+                
+                // Pattern 1: act="..." or act@*="..."
+                text = text.replace(/(act(?:@[\w:-]+)?=)(["'])(.*?)\2/g, (match, attr, quote, code) => {
+                    const index = actParts.length;
+                    actParts.push(code);
+                    return `${attr}${quote}__ACT_${index}__${quote}`;
+                });
+                
+                // Pattern 2: script type="text/act"
+                const scriptOpen = '<' + 'script';
+                const scriptClose = '</' + 'script' + '>';
+                const scriptPattern = new RegExp('(' + scriptOpen + '[^>]*type=["\']text/act["\'][^>]*>)([\\s\\S]*?)(' + scriptClose + ')', 'gi');
+                text = text.replace(scriptPattern, (match, open, code, close) => {
+                    const index = actParts.length;
+                    actParts.push(code);
+                    return `${open}__ACT_${index}__${close}`;
+                });
+                
+                let html = highlighter.codeToHtml(text, { lang: 'html', theme: 'github-dark' });
+                
+                // Replace placeholders with Act-highlighted code
+                actParts.forEach((code, index) => {
+                    const actHtml = highlighter.codeToHtml(code, { lang: 'act', theme: 'github-dark' });
+                    const match = actHtml.match(/<code[^>]*>([\s\S]*?)<\/code>/);
+                    const inner = match ? match[1] : code;
+                    html = html.replace(`__ACT_${index}__`, inner);
+                });
+                
+                el.innerHTML = html;
+            }
+        }
+        
+        document.querySelectorAll('code.lang-act, code.lang-html').forEach(highlightCode);
+        window.highlight_code = highlightCode;
+    </script>
+</head>
+<body>
+    <header>
+        <nav class="container">
+            <ul>
+                <li>
+                    <a href="/" id="logo">
+                        <span id="logo-prev"> </span>act<span id="logo-next"> </span>
+                    </a>
+                    <script type="text/act">
+                        $symbols: [
+                            ' :' 
+                            '$ ' 
+                            ' !' 
+                            ': ' 
+                            ' ;' 
+                            '* ' 
+                            '()'
+                            '. ' 
+                            '[]'
+                            '@ ' 
+                            ' ?' 
+                            '{}' 
+                            '# '
+                        ];
+
+                        loop do
+                            $symbols each do
+                                #logo-prev fade: out & #logo-next fade: out;
+                                #logo-prev << me[0];
+                                #logo-next << me[1];
+                                #logo-prev fade: in & #logo-next fade: in;
+                                wait: 5s;
+                            end;
+                        end;
+                    </script>
+                </li>
+            </ul>
+            <ul>
+                <li><a href="docs.html">Docs</a></li>
+                <li><a href="demo.html">Demo</a></li>
+                <li><a href="https://github.com/oriolmrt/act">GitHub</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1><span class="accent">act</span> is a scripting language for HTML</h1>
+            <p>DOM control without the JavaScript.</p>
+            <div>
+                <code class="lang-html">&lt;button act@click=&quot;#counter (&lt;&lt; :inner_text as int + 1)&quot;&gt;Count!&lt;/button&gt;
+&lt;span id=&quot;counter&quot;&gt;0&lt;/span&gt;</code>
+                <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1rem;">
+                    <button act@click="#counter (<< :inner_text as int + 1)">Count!</button>
+                    <span id="counter">0</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-4">
+            <div class="grid">
+                <article>
+                    <h3 class="accent">It's simple</h3>
+                    <p>Compact syntax that requires no build tools, no bundlers, no transpilers.</p>
+                </article>
+                <article>
+                    <h3 class="accent">It's not that big</h3>
+                    <p>Just a single JS file. Less than 16 KB minified and gzipped.</p>
+                </article>
+                <article>
+                    <h3 class="accent">It's right there</h3>
+                    <p>The code is put right into the elements, following the <a href="https://htmx.org/essays/locality-of-behaviour/">Locality of Behaviour principle</a>.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="mt-4">
+            <h2>Get Started</h2>
+            <p>Just include the script on your HTML:</p>
+            <code class="lang-html">&lt;script src="https://cdn.jsdelivr.net/gh/oriolmrt/act@main/dist/act.min.js"&gt;&lt;/script&gt;</code>
+            <p>And start adding <code>act@</code> attributes or script tags with <code>type="text/act"</code> to your HTML elements:</p>
+            <code class="lang-html">&lt;button act@click="alert: 'Hello, World!'">Say Hello&lt;/button&gt;</code>
+            <p>And you are ready to go.</p>
+        </section>
+
+        <section class="mt-4">
+            <h2>Check it out</h2>
+            <div class="flex-center mb-2">
+                <div id="box">#box</div>
+            </div>
+            <div class="flex-center gap-1 flex-wrap mb-2">
+                <script type="text/act">
+                    on mouseover matching <button> do
+                        #examples-code.inner_text: :outer_html;
+                        highlight_code: #examples-code;
+                    end;
+
+                    on click matching <button> do
+                        #examples-code transition: border-color to `var(--pico-primary)` in 0.1s;
+                        #examples-code transition: border-color to `var(--pico-code-background-color)` in 0.1s;
+                    end;
+                </script>
+                <button act@click="#box fade: out; #box fade: in;">Fade</button>
+                <button act@click="#box transition: background-color to `rgb({random: 0 255}, {random: 0 255}, {random: 0 255})` in 1s">Random color</button>
+                <button act@click="#box toggle!">Toggle</button>
+            </div>
+            <div class="flex-center">
+                <code id="examples-code" class="lang-html" style="text-align: center; border: 1px solid; border-color: var(--pico-code-background-color);"></code>
+            </div>
+        </section>
+    </main>
+</body>
+</html>
