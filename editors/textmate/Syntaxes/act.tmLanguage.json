@@ -68,11 +68,11 @@
             "patterns": [
                 {
                     "name": "keyword.control.act",
-                    "match": "\\b(if|else|each|for|while|loop|with|new|run|on|off|kill|throw|then)\\b(?![-\\w])"
+                    "match": "\\b(if|else|each|for|while|loop|with|new|run|def|on|off|kill|throw|then|do|end|delay|lock|unlock|is_locked)\\b(?![-\\w])"
                 },
                 {
                     "name": "keyword.other.act",
-                    "match": "\\b(local|global|scoped|not|negative|type|wat|in|from|to|step)\\b(?![-\\w])"
+                    "match": "\\b(first|last|local|global|scoped|not|negative|type|wat)\\b(?![-\\w])"
                 }
             ]
         },
@@ -272,7 +272,7 @@
             "patterns": [
                 {
                     "name": "punctuation.terminator.statement.act",
-                    "match": ";|&|\\?|else\\?"
+                    "match": ";|&|\\?|else\\?|>>"
                 }
             ]
         }

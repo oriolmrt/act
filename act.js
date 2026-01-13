@@ -86,6 +86,15 @@
     };
 
     Library.prefixes = {
+        async first(ctx, target, opts, value) {
+            return (await ctx.asValueOf(value, target, opts))[0];
+        },
+
+        async last(ctx, target, opts, value) {
+            const result = await ctx.asValueOf(value, target, opts);
+            return result[result.length - 1];
+        },
+
         global(ctx, target, opts, value) {
             return new Result(Act.globals[value.value], this, { parent: Act.globals, key: value.value });
         },
@@ -119,6 +128,7 @@
                 '🤷 Act WAT?\n',
                 'Value:', value, '\n',
                 'Result:', result, '\n',
+                'Unwrapped Result:', unwrap(result), '\n',
                 'Target:', target, '\n',
                 'Scope:', this.scope, '\n',
                 'Context:', ctx, '\n',
@@ -128,8 +138,6 @@
             return result;
         },
     };
-
-
 
     Library.keywords = {
         async run(ctx, target, opts, [name, ...args]) {
@@ -510,7 +518,7 @@
 
     const classifyValue = (source) => {
         const val = from(through(source)), isClass = is(val, ActClass), isAttribute = is(val, Attribute);
-        return { isClass, isAttribute, name: (isClass || isAttribute) ? val.value : (unwrap(source) ?? '').toString() };
+        return { isClass, isAttribute, name: isClass? val.value.slice(1) : val.value };
     };
 
     const sanitizeHTML = (html) => {
@@ -677,13 +685,27 @@
             return this.parentNode;
         },
 
-        take(attrOrCls, sel) {
-            const els = sel ? (is(unwrap(sel), NodeList) ? unwrap(sel) : [unwrap(sel)]) : [...(this.parentNode?.children || [])].filter(c => c !== this);
-            const { isClass, isAttribute, name } = classifyValue(attrOrCls);
-            els.forEach(el => {
-                if (isAttribute && el.hasAttribute(name)) { this.setAttribute(name, el.getAttribute(name)); el.removeAttribute(name); }
-                if (isClass && el.classList.contains(name.slice(1))) { this.classList.add(name.slice(1)); el.classList.remove(name.slice(1)); }
-            });
+        take(value, parent = this.parentNode) {
+            const { isClass, isAttribute, name } = classifyValue(value);
+
+            if (isClass) {
+                for (const elt of unwrap(parent).querySelectorAll('.' + name)) {
+                    elt.classList.remove(name);
+                }
+
+                this.classList.add(name);
+            } else if (isAttribute) {
+                let attributeValue = '';
+                for (const elt of unwrap(parent).querySelectorAll(`[${name}]`)) {
+                    attributeValue = elt.getAttribute(name);
+                    elt.removeAttribute(name);
+                }
+
+                this.setAttribute(name, attributeValue);
+            } else {
+                throw new ActError('Invalid value');
+            }
+
             return this;
         },
 
@@ -1116,11 +1138,14 @@
             if (selector.startsWith('> ')) {
                 selectorTarget = target;
                 selector = selector.slice(2);
+                if (selectorTarget.querySelector(selector) === null) return null;
             } else if (selector.startsWith('< ')) {
                 selectorTarget = is(target, Element) ? target : ctx.target;
+                if (selectorTarget.closest(selector.slice(2)) === null) return null;
                 return new SelectorResult(selector.slice(2), this, { parent: selectorTarget, mode: 'closest' });
             }
 
+            if (selectorTarget.querySelector(selector) === null) return null;
             return new SelectorResult(selector, this, { parent: selectorTarget });
         }
     }
@@ -2531,7 +2556,7 @@
                 });
 
                 let match, alias = null;
-                if (match = evt.match(/\[(.*?)\](.*)/)) {
+                if (match = evt.match(/^([^\[]+)\[([^\]]+)\]$/)) {
                     alias = match[1]; 
                     evt = match[2];
                 }
