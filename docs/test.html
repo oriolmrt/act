@@ -925,7 +925,7 @@
                 <div class="test" id="as-selector">
                     <script type="text/act" act>
                         $sel: '#as-selector [data-target]' as selector;
-                        $sel.first! @r: 'done';
+                        first $sel @r: 'done';
                     </script>
                     <div class="status">⏳</div>
                     <div class="name"><code>as-selector</code> as selector</div>
@@ -2496,7 +2496,7 @@
                         <div class="child-test">found</div>
                         <script type="text/act" act>
                             $children: {> .child-test};
-                            $el: $children.first!;
+                            $el: first $children;
                             @r: $el.inner_text;
                         </script>
                     </div>

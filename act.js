@@ -14,6 +14,7 @@
         return false;
     };
 
+    const isActFunction = (value) => is(value, Function) && value[ACT_FUNCTION];
     const unwrap = (value) => is(value, Result) ? value.value : value;
     const unwrapAll = (values) => values.map(unwrap);
     const from = (value) => is(value, Result) ? value.from : undefined;
@@ -39,15 +40,12 @@
 
     // LIBRARY (Built-in functions)
 
-    const Library = {
-        ActMethod: class ActMethod {
-            constructor(method) {
-                this.method = method;
-            }
-        },
+    const ACT_FUNCTION = Symbol('actFunction');
 
+    const Library = {
         method(fn) {
-            return new Library.ActMethod(fn);
+            fn[ACT_FUNCTION] = true;
+            return fn;
         },
 
         get(name, target) {
@@ -64,7 +62,7 @@
 
         async exec(fn, args, target, context, opts) {
             if (is(fn, Result)) return await this.exec(fn.value, args, fn.parent, fn.context || context, opts);
-            if (is(fn, Library.ActMethod)) return await fn.method(context, target, opts, ...args);
+            if (isActFunction(fn)) return await fn(context, target, opts, ...args);
             if (is(fn, Function)) return await fn.call(target, ...await context.solveAll(args, target));
         },
     };
@@ -294,15 +292,22 @@
 
             const binding = Binder.from(target, true);
             const em = new EventManager(binding, eventName, options, eventScope.source, eventScope);
+            const isIntersectEvent = Object.keys(Binder.INTERSECT_EVENTS).includes(eventName);
 
-            if (matchingSelector) em.listener = (e) => {
-                let el = e.target;
-                while (el && el !== target) {
-                    if (el.matches(matchingSelector)) return em.run(el, e);
-                    el = el.parentElement;
+            if (matchingSelector) {
+                if (isIntersectEvent) {
+                    options.matchingSelector = matchingSelector;
+                } else {
+                    em.listener = (e) => {
+                        let el = e.target;
+                        while (el && el !== target) {
+                            if (el.matches(matchingSelector)) return em.run(el, e);
+                            el = el.parentElement;
+                        }
+                        if (target.matches(matchingSelector) && el === target) return em.run(target, e);
+                    };
                 }
-                if (target.matches(matchingSelector) && el === target) return em.run(target, e);
-            };
+            }
 
             if (alias) em.alias = alias;
 
@@ -316,7 +321,14 @@
             if (!binding) return false;
 
             eventName = Binder.eventName(await ctx.asString(eventName, target));
-            binding.element.removeEventListener(eventName, binding.events[eventName].listener);
+            const em = binding.events[eventName];
+            if (!em) return false;
+            if (em.observer) {
+                if (em.observer.intersectionObserver) em.observer.intersectionObserver.disconnect();
+                if (em.observer.mutationObserver) em.observer.mutationObserver.disconnect();
+            }
+
+            binding.element.removeEventListener(eventName, em.listener);
             delete binding.events[eventName];
             return true;
         },
@@ -484,8 +496,8 @@
     Library.Array = (function () {
         const wrap = (op) => Library.method(async (ctx, target, opts, fn) => {
             fn = await ctx.solve(fn, target, opts);
-            const exec = (i) => is(fn, Library.ActMethod)
-                ? fn.method(ctx, target[i], opts, target[i], i, target)
+            const exec = (i) => isActFunction(fn)
+                ? fn(ctx, target[i], opts, target[i], i, target)
                 : fn(target[i], i, target);
 
             if (op === 'map') return Promise.all(target.map((_, i) => exec(i)));
@@ -652,7 +664,7 @@
 
             for (const value of args) {
                 const { isClass, isAttribute, name } = classifyValue(value);
-                if (isClass) this.classList.remove(name.slice(1));
+                if (isClass) this.classList.remove(name);
                 else if (isAttribute) this.removeAttribute(name);
             }
             return this;
@@ -726,7 +738,7 @@
         add(...args) {
             for (const value of args) {
                 const { isClass, isAttribute, name } = classifyValue(value);
-                if (isClass) this.classList.add(name.slice(1));
+                if (isClass) this.classList.add(name);
                 else if (isAttribute) this.setAttribute(name, '');
             }
             return this;
@@ -734,7 +746,7 @@
 
         has(value) {
             const { isClass, isAttribute, name } = classifyValue(value);
-            if (isClass) return this.classList.contains(name.slice(1));
+            if (isClass) return this.classList.contains(name);
             if (isAttribute) return this.hasAttribute(name);
             return this.matches(name);
         },
@@ -1376,12 +1388,12 @@
     }
 
     async function resolveAndCallFunction(ctx, target, opts, l, r, key) {
-        if (is(unwrap(l), Library.ActMethod)) {
-            return { solved: true, result: await unwrap(l).method(ctx, l.parent ?? target, opts, ...r) };
+        if (isActFunction(unwrap(l))) {
+            return { solved: true, result: await unwrap(l)(ctx, l.parent ?? target, opts, ...r) };
         } else if (is(unwrap(l), Function)) {
             const solvedR = await ctx.solveAll(r, target, opts);
-            const args = solvedR.map(arg => is(unwrap(arg), Library.ActMethod)
-                ? (...a) => unwrap(arg).method(ctx, target, opts, ...a)
+            const args = solvedR.map(arg => isActFunction(unwrap(arg))
+                ? (...a) => unwrap(arg)(ctx, target, opts, ...a)
                 : unwrap(arg)
             );
             return { solved: true, result: await unwrap(l).call(l.parent ?? target, ...args) };
@@ -2480,6 +2492,8 @@
         INTERSECT_EVENTS: {
             inview: 'actinview',
             offview: 'actoffview',
+            actinview: 'actinview',
+            actoffview: 'actoffview',
         },
 
         from(element, create = false) {
@@ -2595,31 +2609,54 @@
             Object.defineProperty(element, Binder.PROP, { value: this, writable: true, configurable: true });
         }
 
-        #addIntersectObserver(eventName, options) {
-            const observerOptions = {}, element = this.element;
+        #addIntersectObserver(eventName, options, eventManager = null) {
+            const observerOptions = {}, element = this.element, matchingSelector = options.matchingSelector;
 
             if (options.threshold) observerOptions.threshold = options.threshold;
             if (is(options.root, Element)) observerOptions.root = options.root;
             if (options.rootMargin !== undefined) observerOptions.rootMargin = options.rootMargin.toString();
 
-            const observer = new IntersectionObserver(function (entries) {
-                for (const entry of entries) {
-                    if (entry.isIntersecting === (eventName == Binder.INTERSECT_EVENTS.inview)) {
-                        if (options.once) this.unobserve(element);
-                        element.dispatchEvent(new Event(eventName, { detail: { entry } }));
-                        break;
-                    }
+            const observeElements = matchingSelector ? Array.from(element.querySelectorAll(matchingSelector)) : [element];
+            const intersectionObserver = new IntersectionObserver(function (entries) {
+                for (const entry of entries) if (entry.isIntersecting === (eventName == Binder.INTERSECT_EVENTS.inview)) {
+                    if (options.once) this.disconnect();
+                    const event = new CustomEvent(eventName, { detail: { entry, matchedElement: entry.target } });
+                    element.dispatchEvent(event);
+                    if (matchingSelector && eventManager) eventManager.run(entry.target, event);
+                    if (options.once) break;
                 }
             }, observerOptions);
 
-            observer.observe(element);
+            observeElements.forEach(el => intersectionObserver.observe(el));
+
+            let mutationObserver = null;
+            if (matchingSelector) {
+                mutationObserver = new MutationObserver((mutations) => {
+                    for (const mutation of mutations) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                            if (node.matches(matchingSelector)) intersectionObserver.observe(node);
+                            if (node.querySelectorAll) node.querySelectorAll(matchingSelector).forEach(el => intersectionObserver.observe(el));
+                        }
+                    }
+                });
+                mutationObserver.observe(element, { childList: true, subtree: true });
+            }
+
+            return { intersectionObserver, mutationObserver };
         }
+
 
         addEvent(eventName, source, options = {}, eventManager = null, eventAlias = null) {
             if (eventAlias === null) eventAlias = eventName;
             if (Object.keys(Binder.INTERSECT_EVENTS).includes(eventName)) {
                 eventName = Binder.INTERSECT_EVENTS[eventName];
-                this.#addIntersectObserver(eventName, options);
+                if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
+                eventManager.observer = this.#addIntersectObserver(eventName, options, eventManager);
+                if (options.matchingSelector) {
+                    this.events[eventAlias] = eventManager;
+                    return;
+                }
             }
 
             if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
