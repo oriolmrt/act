@@ -208,7 +208,11 @@
             const name = args[0].value;
             let idx = 1, start = 0;
 
-            if (args[idx].value === 'from') { start = await ctx.asValueOf(args[2], target); idx += 2; }
+            if (args[idx].value === 'from') { 
+                start = await ctx.asValueOf(args[2], target); 
+                idx += 2; 
+            }
+
             if (args[idx].value !== 'to') throw new ActError('Invalid for loop syntax: missing "to" word.');
 
             const end = await ctx.asValueOf(args[idx + 1], target);
@@ -572,7 +576,7 @@
 
         const op = ops[mode] || ops.beforeend;
         if (mode === 'afterbegin') list.reverse();
-        list.forEach(n => op(n));
+        for (const n of list) op(n);
         if (mode === 'outerhtml') target.remove();
 
         return nodes;
@@ -608,17 +612,19 @@
         transition(...args) {
             let css = '', wait = 0, style = {}, og = this.style.transition;
             while (args.length) {
-                let dur = 0, time = '', del = 0, prop = args.shift().toString();
+                let duration = 0, time = '', delay = 0, prop = args.shift().toString();
                 const next = () => args.shift().toString();
                 const handlers = {
-                    from: () => this.style[prop] = next(), to: () => style[prop] = next(),
-                    in: () => dur = Library.globals.time_to_ms(next()), using: () => time = next(),
-                    after: () => del = Library.globals.time_to_ms(next())
+                    from: () => this.style[prop] = next(), 
+                    to: () => style[prop] = next(),
+                    in: () => duration = Library.globals.time_to_ms(next()), 
+                    using: () => time = next(),
+                    after: () => delay = Library.globals.time_to_ms(next())
                 };
                 while (args.length && handlers[args[0]]) handlers[args.shift()]();
 
-                wait = Math.max(wait, del + dur);
-                css += `${css ? ', ' : ''}${prop} ${dur}ms${time ? ' ' + time : ''}${del ? ' ' + del + 'ms' : ''}`;
+                wait = Math.max(wait, delay + duration);
+                css += `${css ? ', ' : ''}${prop} ${duration}ms${time ? ' ' + time : ''}${delay ? ' ' + delay + 'ms' : ''}`;
             }
             this.style.transition = css;
             Object.assign(this.style, style);
@@ -659,23 +665,23 @@
             });
         },
 
-        remove(...args) {
-            if (args.length === 0) return this.parentNode?.removeChild(this);
-
-            for (const value of args) {
-                const { isClass, isAttribute, name } = classifyValue(value);
-                if (isClass) this.classList.remove(name);
-                else if (isAttribute) this.removeAttribute(name);
-            }
-            return this;
-        },
-
         collapse(time = 250, timing = 'linear') {
-            const style = window.getComputedStyle(this), h = this.offsetHeight;
-            const props = ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];
-            const kf = [{ height: h + 'px' }, { height: '0px' }];
-            props.forEach(p => { kf[0][p] = style[p]; kf[1][p] = '0px'; kf[0].overflow = kf[1].overflow = 'hidden'; });
-            return this.animate(kf, { duration: Library.globals.time_to_ms(time), easing: timing }).finished.then(() => this.remove());
+            const computedStyle = window.getComputedStyle(this);
+            const spacingProps = ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];
+            const startKeyframe = { height: this.offsetHeight + 'px', overflow: 'hidden' };
+            const endKeyframe = { height: '0px', overflow: 'hidden' };
+
+            for (const prop of spacingProps) {
+                startKeyframe[prop] = computedStyle[prop];
+                endKeyframe[prop] = '0px';
+            }
+
+            const animation = this.animate([startKeyframe, endKeyframe], {
+                duration: Library.globals.time_to_ms(time),
+                easing: timing,
+            });
+
+            return animation.finished.then(() => this.remove());
         },
 
         is_in_view(partially = false) {
@@ -729,7 +735,7 @@
             const { isClass, isAttribute, name } = classifyValue(value);
             const solvedForce = force !== undefined ? unwrap(force) : undefined;
 
-            if (isClass) return this.classList.toggle(name.slice(1), solvedForce);
+            if (isClass) return this.classList.toggle(name, solvedForce);
             if (isAttribute) return this.toggleAttribute(name, solvedForce);
             if (solvedForce !== undefined) return solvedForce ? Library.Element.show.call(this) : Library.Element.hide.call(this);
             return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
@@ -750,19 +756,22 @@
             if (isAttribute) return this.hasAttribute(name);
             return this.matches(name);
         },
+
+        remove(...args) {
+            if (args.length === 0) return this.parentNode?.removeChild(this);
+
+            for (const value of args) {
+                const { isClass, isAttribute, name } = classifyValue(value);
+                if (isClass) this.classList.remove(name);
+                else if (isAttribute) this.removeAttribute(name);
+            }
+            return this;
+        },
     };
 
     Library.function = {};
 
     Library.object = {
-        first() {
-            if ((Array.isArray(this) || is(this, HTMLCollection, NodeList)) && this.length > 0) return this[0];
-        },
-
-        last() {
-            if ((Array.isArray(this) || is(this, HTMLCollection, NodeList)) && this.length > 0) return this[this.length - 1];
-        },
-
         move_to(el, pos) {
             return moveContent(this, el, pos);
         },
@@ -2614,7 +2623,7 @@
 
             if (options.threshold) observerOptions.threshold = options.threshold;
             if (is(options.root, Element)) observerOptions.root = options.root;
-            if (options.rootMargin !== undefined) observerOptions.rootMargin = options.rootMargin.toString();
+            observerOptions.rootMargin = (options?.rootMargin?.toString() || options?.root_margin?.toString());
 
             const observeElements = matchingSelector ? Array.from(element.querySelectorAll(matchingSelector)) : [element];
             const intersectionObserver = new IntersectionObserver(function (entries) {
@@ -2627,7 +2636,7 @@
                 }
             }, observerOptions);
 
-            observeElements.forEach(el => intersectionObserver.observe(el));
+            for (const el of observeElements) intersectionObserver.observe(el);
 
             let mutationObserver = null;
             if (matchingSelector) {
@@ -2636,7 +2645,7 @@
                         for (const node of mutation.addedNodes) {
                             if (node.nodeType !== Node.ELEMENT_NODE) continue;
                             if (node.matches(matchingSelector)) intersectionObserver.observe(node);
-                            if (node.querySelectorAll) node.querySelectorAll(matchingSelector).forEach(el => intersectionObserver.observe(el));
+                            if (node.querySelectorAll) for (const el of node.querySelectorAll(matchingSelector)) intersectionObserver.observe(el);
                         }
                     }
                 });
@@ -2645,7 +2654,6 @@
 
             return { intersectionObserver, mutationObserver };
         }
-
 
         addEvent(eventName, source, options = {}, eventManager = null, eventAlias = null) {
             if (eventAlias === null) eventAlias = eventName;
@@ -2678,7 +2686,6 @@
 
         lookupBlock(name) {
             let binding = this;
-
             while (binding) {
                 if (Object.hasOwn(binding.blocks, name)) return { block: binding.blocks[name], binding };
                 binding = binding.parent();
