@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="act-config" content="lexerDebug: true">
+    <meta name="act-config" content="parserDebug: true">
     <title>Documentation - act</title>
     
     <!-- Fonts -->
@@ -122,34 +124,146 @@
     </header>
 
     <div class="docs-layout">
-        <aside class="sidebar">
-            <details open>
-                <summary>Getting Started</summary>
-                <ul>
-                    <li><a href="#introduction" class="active">Introduction</a></li>
-                    <li><a href="#installation">Installation</a></li>
-                    <li><a href="#quick-start">Quick Start</a></li>
-                </ul>
-            </details>
+        <aside id="toc">
+            <script type="text/act">
+                // Generate TOC from #main-content
+                {#main-content > section} each do
+                    $details: new <details>;
+                    $details.append: `<summary>{first {> h2}.inner_text}</summary>`;
+                    $list: new <ul>;
+
+                    {> h3[id]} each do
+                        $list.append: `<li><a href="#{@id}">{:inner_text}</a></li>`;
+                    end;
+
+                    $details.append: $list;
+                    #toc.append: $details;
+                end;
+
+                on click matching <a> do
+                    window lock scroll;
+                    {< details} take: @open #toc;
+                    take: .active #toc;
+                    wait: 500ms;
+                    window unlock scroll;
+                end;
+
+                global $last_scroll_y: window.scroll_y;
+                warn: $last_scroll_y;
+
+                def highlight_toc $force_first do
+                    lock;
+
+                    do
+                        $visible_headers: [];
+                        {#main-content h3} each (is_in_view!? $visible_headers << me);
+                        $visible_headers.length is 0? stop;
+
+                        // If scrolling up, highlight the first visible header, else the last
+                        $toc_link: if $force_first or $last_scroll_y > window.scroll_y (
+                            first {#toc a[href="#{first $visible_headers.@id}"]};
+                        ) else (
+                            first {#toc a[href="#{last $visible_headers.@id}"]};
+                        );
+
+                        with $toc_link do
+                            take: .active #toc &
+                            {< details} take: @open #toc;
+                        end;
+                    end;
+
+                    $last_scroll_y: window.scroll_y;
+                    wait: 100ms;
+                    unlock;
+                end;
+
+                window on scroll (#toc run highlight_toc);
+                run highlight_toc true;
+            </script>
         </aside>
 
-        <main>
-            <h1>Introduction</h1>
-            <p>Act is a minimalistic inline scripting language for HTML. It allows you to add interactivity to your web pages without writing JavaScript.</p>
-            
-            <h2 id="installation">Installation</h2>
-            <p>Add the script to your HTML:</p>
-            <pre><code>&lt;script src="https://cdn.jsdelivr.net/gh/oriolmrt/act@main/act.js"&gt;&lt;/script&gt;</code></pre>
+        <main id="main-content">
+            <section>
+                <h2 id="getting-started">Getting Started</h2>
+                <h3 id="introduction">Introduction</h3>
+                <p>Act is a minimalistic inline scripting language for HTML. It allows you to add interactivity to your web pages without writing JavaScript.</p>
+                
+                <h3 id="installation">Installation</h3>
+                <p>Add the script to your HTML:</p>
+                <code class="lang-html">&lt;script src="https://cdn.jsdelivr.net/gh/oriolmrt/act@main/act.js"&gt;&lt;/script&gt;</code>
 
-            <h2 id="quick-start">Quick Start</h2>
-            <p>Add <code>act@</code> attributes to your HTML elements:</p>
-            <pre><code>&lt;button act@click="#message << 'Hello!'"&gt;Click me&lt;/button&gt;
-&lt;div id="message"&gt;&lt;/div&gt;</code></pre>
+                <h3 id="quick-start">Quick Start</h3>
+                <p>Add <code>act@</code> attributes to your HTML elements:</p>
+                <code class="lang-html"> &lt;button act@click="#message &lt;&lt; 'Hello!'"&gt;Click me&lt;/button&gt;</code>
+                <p>And add a div to display the message:</p>
+                <code class="lang-html"> &lt;div id="message"&gt;&lt;/div&gt;</code>
+            </section>
+
+            <section>
+                <h2 id="syntax">Syntax</h2>
+                <h3 id="selectors">Selectors</h3>
+                <p>Act uses CSS selectors to target elements. You can use any valid CSS selector to select elements on the page. The most common selectors are ID selectors (#id) and class selectors (.class).</p>
+                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+                <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+                <h3 id="operators">Operators</h3>
+                <p>Act provides various operators to manipulate values and perform operations. These include arithmetic operators, comparison operators, and logical operators.</p>
+                <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>
+                <p>Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.</p>
+            </section>
+
+            <section>
+                <h2 id="events">Events</h2>
+                <h3 id="click-events">Click Events</h3>
+                <p>Click events are triggered when a user clicks on an element. You can attach click handlers using the act@click attribute.</p>
+                <p>Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.</p>
+                <p>Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur.</p>
+
+                <h3 id="keyboard-events">Keyboard Events</h3>
+                <p>Keyboard events allow you to respond to user keyboard input. Common events include keydown, keyup, and keypress.</p>
+                <p>Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur.</p>
+                <p>At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.</p>
+            </section>
+
+            <section>
+                <h2 id="animations">Animations</h2>
+                <h3 id="transitions">Transitions</h3>
+                <p>Act provides built-in support for CSS transitions. You can animate properties like opacity, transform, and colors with simple syntax.</p>
+                <p>Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga. Et harum quidem rerum facilis est et expedita distinctio.</p>
+                <p>Nam libero tempore, cum soluta nobis est eligendi optio cumque nihil impedit quo minus id quod maxime placeat facere possimus, omnis voluptas assumenda est.</p>
+
+                <h3 id="fade-effects">Fade Effects</h3>
+                <p>Fade in and fade out effects are commonly used for showing and hiding elements smoothly. Act provides convenient shortcuts for these operations.</p>
+                <p>Omnis dolor repellendus est. Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et voluptates repudiandae sint et molestiae non recusandae.</p>
+                <p>Itaque earum rerum hic tenetur a sapiente delectus, ut aut reiciendis voluptatibus maiores alias consequatur aut perferendis doloribus asperiores repellat.</p>
+            </section>
+
+            <section>
+                <h2 id="control-flow">Control Flow</h2>
+                <h3 id="conditionals">Conditionals</h3>
+                <p>Conditional statements allow you to execute different code based on certain conditions. Act supports if/else statements with a clean syntax.</p>
+                <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.</p>
+                <p>Quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore.</p>
+
+                <h3 id="loops">Loops</h3>
+                <p>Loops allow you to repeat actions multiple times. Act provides various loop constructs including for loops and each iterators.</p>
+                <p>Eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+                <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam.</p>
+            </section>
+
+            <section>
+                <h2 id="advanced">Advanced</h2>
+                <h3 id="variables">Variables</h3>
+                <p>Variables in Act allow you to store and reuse values throughout your scripts. They are prefixed with the $ symbol.</p>
+                <p>Eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur.</p>
+                <p>Aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est.</p>
+
+                <h3 id="scoping">Scoping</h3>
+                <p>Understanding scope is important when working with variables and nested blocks. Act uses lexical scoping similar to other programming languages.</p>
+                <p>Qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam.</p>
+                <p>Quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur.</p>
+            </section>
         </main>
     </div>
-
-    <footer class="container">
-        <p>MIT License © 2024</p>
-    </footer>
 </body>
 </html>

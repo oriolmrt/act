@@ -19,6 +19,44 @@ code, pre, #counter {
     color: var(--pico-primary);
 }
 
+/* Button styling - tactile feel */
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        0 3px 0 rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.1s ease;
+}
+
+button:hover,
+[role="button"]:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+input[type="reset"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        0 4px 0 rgba(0, 0, 0, 0.4),
+        0 6px 12px rgba(0, 0, 0, 0.35);
+}
+
+button:active,
+[role="button"]:active,
+input[type="button"]:active,
+input[type="submit"]:active,
+input[type="reset"]:active {
+    transform: translateY(1px);
+    box-shadow: 
+        inset 0 2px 4px rgba(0, 0, 0, 0.3),
+        0 1px 0 rgba(0, 0, 0, 0.4),
+        0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
 /* Logo */
 #logo, #logo:hover {
     --pico-font-size: 100%;
@@ -45,6 +83,11 @@ header {
 header nav, header nav ul {
     margin: 0;
     padding: 0;
+}
+
+/* Anchor scroll offset for sticky header */
+[id] {
+    scroll-margin-top: 100px;
 }
 
 /* Hero section */
@@ -128,7 +171,7 @@ pre code {
     min-height: calc(100vh - 60px);
 }
 
-.sidebar {
+#toc {
     position: sticky;
     top: 60px;
     width: var(--sidebar-width);
@@ -139,9 +182,10 @@ pre code {
     background-color: var(--pico-color-zinc-950);
 
     --pico-accordion-active-summary-color: var(--pico-color-jade-200);
+    --pico-nav-element-spacing-vertical: 0;
 }
 
-.sidebar h3 {
+#toc h3 {
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -149,17 +193,17 @@ pre code {
     margin: 1.5rem 0 0.5rem;
 }
 
-.sidebar h3:first-child {
+#toc h3:first-child {
     margin-top: 0;
 }
 
-.sidebar ul {
+#toc ul {
     list-style: none;
     padding: 0;
     margin: 0;
 }
 
-.sidebar a {
+#toc a {
     display: block;
     padding: 0.4rem 0.75rem;
     border-radius: 6px;
@@ -168,11 +212,11 @@ pre code {
     text-decoration: none;
 }
 
-.sidebar a:hover {
+#toc a:hover {
     background: var(--pico-color-zinc-800);
 }
 
-.sidebar a.active {
+#toc a.active {
     color: var(--pico-primary);
     background: rgba(16, 185, 129, 0.1);
 }
@@ -180,12 +224,16 @@ pre code {
 .docs-layout main {
     flex: 1;
     padding: 2rem 3rem;
-    max-width: 900px;
+    max-width: 1200px;
+}
+
+#main-content section {
+    margin-bottom: 3rem;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-    .sidebar {
+    #toc {
         display: none;
     }
     .docs-layout main {

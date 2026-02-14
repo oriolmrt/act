@@ -138,9 +138,43 @@
     };
 
     Library.keywords = {
+        async case(ctx, target, opts, [value, ...args]) {
+            const testValue = await ctx.asValueOf(value, target, opts);
+            
+            for (let i = 0; i < args.length; i++) {
+                const keyword = args[i];
+                
+                if (!is(keyword, Word)) return;
+                if (keyword.value === 'when') {
+                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
+                    const scope = args[++i];
+                    if (testValue === matchValue) return await ctx.solve(scope, target, opts);
+                } else if (keyword.value === 'like') {
+                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
+                    const scope = args[++i];
+                    if (testValue == matchValue) return await ctx.solve(scope, target, opts);
+                } else if (keyword.value === 'else') {
+                    return await ctx.solve(args[++i], target, opts);
+                }
+            }
+            
+        },
+
+        async let(ctx, target, opts, [value]) {
+            value = await ctx.solve(value, target, opts);
+            
+            if (!is(value, Result)) {
+                const parent = ctx.scopeData(this.scope);
+                value = new Result(null, this, { parent, key: value.value });
+            }
+
+            value.set(null);
+            return value;
+        },
+
         async run(ctx, target, opts, [name, ...args]) {
             name = await ctx.asString(name, target);
-            const block = ctx.binding.getBlock(name);
+            const block = ctx.binding.getBlock(name) ?? Binder.from(target).getBlock(name);
             if (!block) throw new ActError(`Block '${name}' not found.`);
 
             const data = ctx.scopeData(block.scope);
@@ -182,8 +216,9 @@
                 for (const [key, value] of Object.entries(iterable)) {
                     ctx.scopeData(solvable)[args[0].value] = key;
                     ctx.scopeData(solvable)[args[1].value] = value;
-                    try { await ctx.solve(solvable, iterable, opts); }
-                    catch (e) {
+                    try { 
+                        await ctx.solve(solvable, iterable, opts); 
+                    } catch (e) {
                         if (is(e, Signal.Break)) return e.data;
                         if (is(e, Signal.Continue)) continue;
                         throw e;
@@ -208,7 +243,7 @@
             const name = args[0].value;
             let idx = 1, start = 0;
 
-            if (args[idx].value === 'from') { 
+            if (args[idx]?.value === 'from') { 
                 start = await ctx.asValueOf(args[2], target); 
                 idx += 2; 
             }
@@ -219,7 +254,7 @@
             idx += 2;
 
             let step = 1, stepDefined = false;
-            if (args[idx].value == 'step') {
+            if (args[idx]?.value == 'step') {
                 step = await ctx.asValueOf(args[idx + 1], target);
                 stepDefined = true;
             }
@@ -246,8 +281,9 @@
 
         async loop(ctx, target, opts, [solvable]) {
             for (;;) {
-                try { await ctx.solve(solvable, target, opts); }
-                catch (e) {
+                try { 
+                    await ctx.solve(solvable, target, opts); 
+                } catch (e) {
                     if (is(e, Signal.Break)) return e.data;
                     if (is(e, Signal.Continue)) continue;
                     throw e;
@@ -259,8 +295,12 @@
             if (is(constructor, Tag)) return document.createElement(constructor.value);
             let value = await ctx.asValueOf(constructor, target);
             args = await ctx.solveAll(args, target, opts);
-            try { return new value(...args); }
-            catch (e) { return new window[value.toString()](...args); }
+
+            try { 
+                return new value(...args); 
+            } catch (e) { 
+                return new window[value.toString()](...args); 
+            }
         },
 
         async on(ctx, target, opts, [eventNameOrAlias, ...args]) {
@@ -409,14 +449,14 @@
             return withTarget;
         },
 
-        async delay(ctx, target, opts, [time, scope]) {
-            clearTimeout(scope.__delayTimeout__ || 0);
+        async debounce(ctx, target, opts, [time, scope]) {
+            clearTimeout(scope.__debounceTimeout__ || 0);
             const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
 
             return new Promise(resolve => {
-                scope.__delayTimeout__ = setTimeout(async () => {
+                scope.__debounceTimeout__ = setTimeout(async () => {
                     resolve(await ctx.solve(scope, target, opts));
-                    delete scope.__delayTimeout__;
+                    delete scope.__debounceTimeout__;
                 }, ms);
             });
         },
@@ -492,8 +532,10 @@
         },
 
         random(min, max) {
-            const rand = Math.random() * (max - min + 1) + min;
-            return (min % 1 + max % 1 == 0) ? Math.floor(rand) : rand;
+            min = Number(min) || 0;
+            max = Number(max) || 0;
+            if (Number.isInteger(min) && Number.isInteger(max)) return Math.floor(Math.random() * (max - min + 1)) + min;
+            return Math.random() * (max - min) + min;
         },
     };
 
@@ -545,8 +587,8 @@
 
     const insertContent = (element, content, position) => {
         const val = unwrap(content);
-        if (is(val, Element)) position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
-        else element.insertAdjacentHTML(position, sanitizeHTML(val.toString()));
+        if (is(val, Element, DocumentFragment)) position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
+        else element.insertAdjacentHTML(position, sanitizeHTML(val));
         return element;
     };
 
@@ -584,15 +626,27 @@
 
     const findSibling = (element, selector, forward) => {
         if (!selector) return forward ? element.nextElementSibling : element.previousElementSibling;
-        let all;
-        if (typeof selector === 'string') all = document.querySelectorAll(selector);
-        else if (is(selector, Element)) all = [selector];
-        else if (is(selector, NodeList) || Array.isArray(selector)) all = selector;
-        else all = document.querySelectorAll(selector.toString());
+        if (is(selector, Element)) return selector;
 
-        const mask = forward ? 4 : 2;
-        if (forward) { for (const n of all) if (element.compareDocumentPosition(n) & mask) return n; }
-        else { for (let i = all.length - 1; i >= 0; i--) if (element.compareDocumentPosition(all[i]) & mask) return all[i]; }
+        if (is(selector, NodeList) || Array.isArray(selector)) {
+            const mask = forward ? 4 : 2;
+            if (forward) {
+                for (const n of selector)
+                    if (element.compareDocumentPosition(n) & mask) return n;
+            } else {
+                for (let i = selector.length - 1; i >= 0; i--)
+                    if (element.compareDocumentPosition(selector[i]) & mask) return selector[i];
+            }
+            return null;
+        }
+
+        const s = typeof selector === 'string' ? selector : selector.toString();
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+        walker.currentNode = element;
+        let node;
+        while (node = forward ? walker.nextNode() : walker.previousNode()) {
+            if (node.matches(s)) return node;
+        }
         return null;
     };
 
@@ -663,25 +717,6 @@
             ).finished.then(() => {
                 this.style.opacity = inout === 'in' ? '1' : '0';
             });
-        },
-
-        collapse(time = 250, timing = 'linear') {
-            const computedStyle = window.getComputedStyle(this);
-            const spacingProps = ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];
-            const startKeyframe = { height: this.offsetHeight + 'px', overflow: 'hidden' };
-            const endKeyframe = { height: '0px', overflow: 'hidden' };
-
-            for (const prop of spacingProps) {
-                startKeyframe[prop] = computedStyle[prop];
-                endKeyframe[prop] = '0px';
-            }
-
-            const animation = this.animate([startKeyframe, endKeyframe], {
-                duration: Library.globals.time_to_ms(time),
-                easing: timing,
-            });
-
-            return animation.finished.then(() => this.remove());
         },
 
         is_in_view(partially = false) {
@@ -928,9 +963,13 @@
             );
         }
 
-        get code() { return this.source.code.substring(this.tokenStart.index, this.tokenEnd.indexEnd); }
+        get code() { 
+            return this.source.code.substring(this.tokenStart.index, this.tokenEnd.indexEnd); 
+        }
 
-        solve() { return this.value; }
+        solve() { 
+            return this.value; 
+        }
 
         solveDebug(ctx, target, result) {
             console.log(
@@ -1078,16 +1117,18 @@
 
     class Property extends Solvable {
         solve(ctx, target) {
+            let key = this.value;
+
             if (target === null || target === undefined) {
-                return new Result(undefined, this, { parent: target, key: this.value });
+                return new Result(undefined, this, { parent: target, key });
             }
 
             if (Act.config.convertToCamelCase) {
-                const camelKey = snakeToCamel(this.value);
-                if (target[camelKey] !== undefined) this.value = camelKey;
+                const camelKey = snakeToCamel(key);
+                if (target[camelKey] !== undefined) key = camelKey;
             }
 
-            return new Result(target[this.value], this, { parent: target, key: this.value });
+            return new Result(target[key], this, { parent: target, key });
         }
     }
 
@@ -1254,7 +1295,9 @@
                         target = result;
                     }
                 } catch (e) {
-                    if (is(e, Signal.Stop)) { return e.data; } else if (is(e, Signal.Repeat) || (this.isRoot() && is(e, Signal.Restart))) {
+                    if (is(e, Signal.Stop)) { 
+                        return e.data; 
+                    } else if (is(e, Signal.Repeat) || (this.isRoot() && is(e, Signal.Restart))) {
                         i = -1;
                     } else {
                         throw e;
@@ -1270,7 +1313,9 @@
             let scope = this;
             while (scope) {
                 const scopeData = ctx.scopeData(scope);
-                if (scopeData[key] !== undefined) { return new Result(scopeData[key], scope, { parent: scopeData, key }); }
+                if (scopeData[key] !== undefined) { 
+                    return new Result(scopeData[key], scope, { parent: scopeData, key }); 
+                }
 
                 if (is(scopeData.__fromScope__, this.constructor)) {
                     scope = scopeData.__fromScope__;
@@ -1526,14 +1571,14 @@
         async perform(ctx, target, opts) {
             let { l, r } = await this.prepare(ctx, target, opts);
             l = l ?? target ?? ctx.target;
-            if (is(unwrap(r), Element)) r = unwrap(r).innerHTML;
 
             if (is(unwrap(l), Element)) {
+                if (is(unwrap(r), Element)) r = unwrap(r).innerHTML;
                 return unwrap(l).innerHTML = r?.toString() ?? '';
             } else if (is(unwrap(l), NodeList)) {
                 return unwrap(l)[0].innerHTML = r?.toString() ?? '';
             } else if (Array.isArray(unwrap(l))) {
-                return unwrap(l).append(unwrap(r));
+                return unwrap(l).push(unwrap(r));
             }
 
             throw new ActError(`Cannot insert into target of type '${typeof unwrap(l)}'. Expected Element, NodeList, or Array.`);
@@ -1641,7 +1686,7 @@
                 if (is(this.r, Scope)) {
                     const scopeData = ctx.scopeData(this.r);
                     scopeData.exception = e;
-                    scopeData.exception.message = e.actException.message;
+                    scopeData.exception.message = (e.actException ?? e).message;
                 }
 
                 return await ctx.solve(this.r, target, opts);
@@ -1795,7 +1840,7 @@
             ';': 'sync',
             '&': 'async',
             '?': 'condition',
-            'else?': 'branch',
+            '~': 'branch',
             '>>': 'fwd',
         };
 
@@ -2261,7 +2306,7 @@
 
             if (this.lexer.nextIf('colon') && this.lexer.fwd().tokenIs('rbrace')) { 
                 return new ActObject(scope, this.source, { value: new Map }); 
-            } else if (this.lexer.fwd().nextIf('rbrace')) { 
+            } else if (this.lexer.fwd().tokenIs('rbrace')) { 
                 return new ActArray(scope, this.source, { value: [] }); 
             }
 
@@ -2876,7 +2921,7 @@
     }
 
     const Act = global.Act = {
-        get version() { return '0.1.0'; },
+        get version() { return '0.2.0'; },
 
         config: {
             convertToCamelCase: true,
@@ -2892,9 +2937,12 @@
         configure() {
             const meta = document.querySelectorAll('meta[name="act-config"]');
             const conf = {};
-            for (const m of meta) { 
-                const [k, v] = m.content.split(':'); 
-                conf[k.trim()] = JSON.parse(v.trim()); 
+            for (const m of meta) {
+                const i = m.content.indexOf(':');
+                if (i === -1) continue;
+                const k = m.content.substring(0, i).trim();
+                const v = m.content.substring(i + 1).trim();
+                conf[k] = JSON.parse(v);
             }
             Object.assign(this.config, conf, window.__actConfig || {});
             if (this.config.debugLexer) Lexer.debug = true;

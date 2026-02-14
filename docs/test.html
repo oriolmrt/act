@@ -1045,10 +1045,84 @@
 
                 <div class="test" id="else-branch">
                     <div class="status">⏳</div>
-                    <div class="name"><code>else-branch</code> else? branch</div>
+                    <div class="name"><code>else-branch</code> ~ branch</div>
                     <div data-target data-e="branch">
                         <script type="text/act" act>
-                            false? @r: 'no' else? @r: 'branch';
+                            false? @r: 'no' ~ @r: 'branch';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="case-when-match">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>case-when-match</code> case when (match)</div>
+                    <div data-target data-e="red">
+                        <script type="text/act" act>
+                            $c: 'red';
+                            @r: case $c
+                            when 'red' 'red'
+                            when 'blue' 'blue'
+                            else 'other';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="case-when-else">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>case-when-else</code> case when (else)</div>
+                    <div data-target data-e="other">
+                        <script type="text/act" act>
+                            $c: 'green';
+                            @r: case $c
+                            when 'red' 'red'
+                            when 'blue' 'blue'
+                            else 'other';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="case-like-loose">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>case-like-loose</code> case like (loose)</div>
+                    <div data-target data-e="match">
+                        <script type="text/act" act>
+                            $v: 1;
+                            @r: case $v
+                            like '1' 'match'
+                            else 'no';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="case-when-no-like">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>case-when-no-like</code> case when strict (no loose)</div>
+                    <div data-target data-e="nope">
+                        <script type="text/act" act>
+                            $v: 1;
+                            @r: case $v
+                            when '1' 'match'
+                            else 'nope';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="case-scope-body">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>case-scope-body</code> case with scope body</div>
+                    <div data-target data-e="found-b">
+                        <script type="text/act" act>
+                            $v: 'b';
+                            case $v
+                            when 'a' (
+                                @r: 'found-a';
+                            )
+                            when 'b' (
+                                @r: 'found-b';
+                            )
+                            else (
+                                @r: 'not-found';
+                            );
                         </script>
                     </div>
                 </div>
@@ -1216,6 +1290,43 @@
                             $x += 5;
                             @r: $x;
                             end;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="let-nullify">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>let-nullify</code> let nullify variable</div>
+                    <div data-target data-e="nullified">
+                        <script type="text/act" act>
+                            $x: 'hello';
+                            let $x;
+                            not $x? @r: 'nullified';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="let-declare">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>let-declare</code> let declare as null</div>
+                    <div data-target data-e="declared">
+                        <script type="text/act" act>
+                            let $fresh;
+                            not $fresh? @r: 'declared';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="let-scoped">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>let-scoped</code> let scoped prefix</div>
+                    <div data-target data-e="10">
+                        <script type="text/act" act>
+                            $v: 10;
+                            do
+                                let scoped $v;
+                            end;
+                            @r: $v;
                         </script>
                     </div>
                 </div>
@@ -1604,13 +1715,13 @@
                     </div>
                 </div>
 
-                <div class="test" id="delay">
+                <div class="test" id="debounce">
                     <div class="status">⏳</div>
-                    <div class="name"><code>delay</code> delay</div>
+                    <div class="name"><code>debounce</code> debounce</div>
                     <div data-target data-e="delayed">
                         <script type="text/act" act>
                             @r: 'not-delayed';
-                            delay 50ms (@r: 'delayed');
+                            debounce 50ms (@r: 'delayed');
                         </script>
                     </div>
                 </div>

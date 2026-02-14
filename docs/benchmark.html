@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Act Benchmark</title>
+    <script src="../act.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 24px 32px;
+            line-height: 1.5;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            margin-bottom: 4px;
+            color: #fff;
+        }
+
+        h1 span {
+            color: #888;
+            font-weight: 400;
+            font-size: 0.9rem;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 16px;
+            align-items: end;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: #222;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 6px 10px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+
+        .control-group select {
+            min-width: 160px;
+        }
+
+        .control-group input[type="number"] {
+            width: 100px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            align-items: end;
+        }
+
+        button {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: filter 0.15s;
+        }
+
+        button:hover {
+            filter: brightness(1.15);
+        }
+
+        button:active {
+            filter: brightness(0.9);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: none;
+        }
+
+        .btn-run {
+            background: #3a7bd5;
+            color: #fff;
+        }
+
+        .btn-run5 {
+            background: #2d5a27;
+            color: #fff;
+        }
+
+        .btn-clear {
+            background: #444;
+            color: #ccc;
+        }
+
+        .results {
+            margin-bottom: 24px;
+        }
+
+        .results h2 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .results-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background: #252525;
+            border-bottom: 2px solid #444;
+            color: #999;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .results-table td {
+            padding: 6px 12px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .results-table tr:hover td {
+            background: #252525;
+        }
+
+        .results-table .num {
+            text-align: right;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 0.8rem;
+        }
+
+        .results-table .avg-row td {
+            background: #1e2a1e;
+            border-top: 2px solid #3a5a3a;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            color: #555;
+            text-align: center;
+            padding: 32px;
+            font-style: italic;
+        }
+
+        .profile-desc {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 16px;
+            padding: 8px 12px;
+            background: #1e1e1e;
+            border-left: 3px solid #444;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .profile-desc strong {
+            color: #aaa;
+        }
+
+        #bench-container {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .running-indicator {
+            display: inline-block;
+            margin-left: 8px;
+            color: #f0c040;
+            font-size: 0.8rem;
+            animation: pulse 0.8s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .chart {
+            margin-top: 16px;
+            padding: 16px;
+            background: #222;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        .chart h3 {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .bar-label {
+            width: 60px;
+            font-size: 0.75rem;
+            color: #888;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .bar-track {
+            flex: 1;
+            height: 20px;
+            background: #1a1a1a;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+            min-width: 2px;
+        }
+
+        .bar-fill.dom {
+            background: #4a7aaa;
+        }
+
+        .bar-fill.act {
+            background: #5aaa5a;
+        }
+
+        .bar-value {
+            width: 80px;
+            font-size: 0.75rem;
+            font-family: 'SF Mono', Monaco, monospace;
+            color: #aaa;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>⚡ Act Benchmark <span>v1.0</span></h1>
+    <p class="subtitle">Measures parse, bind, and execute performance across different workloads</p>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>Elements</label>
+            <input type="number" id="count" value="1000" min="10" max="10000" step="100">
+        </div>
+        <div class="control-group">
+            <label>Profile</label>
+            <select id="profile">
+                <option value="dom">DOM Manipulation</option>
+                <option value="parse">Parse Only (event-bound)</option>
+                <option value="exec">Parse + Execute (init)</option>
+                <option value="events">Event Binding (multi-event)</option>
+                <option value="mixed" selected>Mixed (realistic)</option>
+                <option value="stress">Stress (loops + scopes)</option>
+            </select>
+        </div>
+        <div class="btn-group">
+            <button class="btn-run" id="btn-run" onclick="runBench()">▶ Run</button>
+            <button class="btn-run5" id="btn-run5" onclick="runBench(5)">▶ Run 5×</button>
+            <button class="btn-clear" onclick="clearResults()">Clear</button>
+        </div>
+        <span id="running" class="running-indicator" style="display:none">Running…</span>
+    </div>
+
+    <div id="profile-desc" class="profile-desc">
+        <strong>Mixed (realistic):</strong> Init code + event handlers per element — closest to real-world usage patterns.
+    </div>
+
+    <div class="results">
+        <h2>Results</h2>
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Elements</th>
+                    <th>Profile</th>
+                    <th class="num">DOM Gen</th>
+                    <th class="num">Act Init</th>
+                    <th class="num">Total</th>
+                    <th class="num">Per Element</th>
+                </tr>
+            </thead>
+            <tbody id="results-body">
+                <tr>
+                    <td colspan="7" class="empty-state">No results yet. Click Run to start.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="chart-area"></div>
+
+    <div id="bench-container"></div>
+
+    <script>
+        const PROFILES = {
+            parse: {
+                name: 'Parse Only',
+                desc: 'Complex syntax parsed but <em>not executed</em> on init — isolates lexer + parser + binding cost.',
+                templates: [
+                    `act@click="$a: 1; $b: 2; $c: $a + $b; $d: $c * 3 - 1; $e: $d / 2; @data-r: $e;"`,
+                    `act@click="$name: 'benchmark'; $upper: $name.to_upper_case!; @data-r: $upper;"`,
+                    `act@click="$x: 42; $x > 20 and $x < 100? @data-r: 'in range' ~ @data-r: 'out';"`,
+                    `act@click="$arr: [1 2 3]; $first: $arr[0]; $last: $arr[2]; @data-r: $first + $last;"`,
+                    `act@click="$obj: [a: 1 b: 2]; $sum: $obj.a + $obj.b; @data-r: 'done';"`,
+                    `act@click="$s: 'hello world'; $parts: $s.split: ' '; $len: $parts.length; @data-r: $len;"`,
+                ],
+            },
+            exec: {
+                name: 'Parse + Execute',
+                desc: 'Code runs on initialization — measures full pipeline: lex → parse → bind → execute.',
+                templates: [
+                    `act="$a: 1; $b: 2; $c: $a + $b; @data-r: $c;"`,
+                    `act="$x: 42; $x > 20? @data-r: 'big' ~ @data-r: 'small';"`,
+                    `act="$s: 'hello world'; $upper: $s.to_upper_case!; @data-r: $upper;"`,
+                    `act="$arr: [10 20 30]; $len: $arr.length; @data-r: $len;"`,
+                    `act="$obj: [x: 1 y: 2]; $sum: $obj.x + $obj.y; @data-r: $sum;"`,
+                ],
+            },
+            events: {
+                name: 'Event Binding',
+                desc: 'Multiple event handlers per element — measures binding overhead with many listeners.',
+                templates: [
+                    `act@click="$x: 1;" act@mouseover="@data-h: 'true';" act@mouseout="@data-h: 'false';"`,
+                    `act@click="@data-c: 'true';" act@dblclick="@data-d: 'true';"`,
+                    `act@click="$n: 1;" act@mouseover="$n: 2;" act@mouseout="$n: 0;" act@dblclick="$n: -1;"`,
+                    `act@click="$v: 'a';" act@focus="$v: 'b';" act@blur="$v: 'c';"`,
+                ],
+            },
+            mixed: {
+                name: 'Mixed',
+                desc: 'Init code + event handlers per element — closest to real-world usage patterns.',
+                templates: [
+                    `act="$count: 0; @data-count: $count;" act@click="$count += 1; @data-count: $count;"`,
+                    `act="$active: false; @data-active: $active;" act@click="$active: not $active; @data-active: $active;"`,
+                    `act="$label: 'Item'; @data-label: $label;" act@click="@data-clicked: 'true';"`,
+                    `act="$x: 0; $y: 0; @data-ready: 'true';" act@click="$x += 1;" act@mouseover="$y += 1;"`,
+                    `act="append: new <span>; add .initialized; *opacity: '1';" act@click="toggle .active;"`,
+                    `act="$badge: new <i>; prepend: $badge; @data-built: 'true';" act@click="$badge remove;"`,
+                ],
+            },
+            stress: {
+                name: 'Stress',
+                desc: 'Loops and heavy computation on init — worst-case scenario for execution engine.',
+                templates: [
+                    `act="$items: [1 2 3 4 5]; $sum: 0; each $items ($sum += $item); @data-r: $sum;"`,
+                    `act="$count: 0; for i to 10 ($count += 1); @data-r: $count;"`,
+                    `act="$a: 5; $b: 10; $c: $a * $b; $c > 30? @data-r: 'big' ~ @data-r: 'small'; $d: $c + $a - $b; @data-d: $d;"`,
+                    `act="$items: [10 20 30 40 50]; $max: 0; each $items ($item > $max? $max: $item); @data-r: $max;"`,
+                ],
+            },
+            dom: {
+                name: 'DOM Manipulation',
+                desc: 'Modifies styles, classes, attributes, and content on init — measures Act\'s DOM interaction overhead.',
+                templates: [
+                    `act="$el: new <span>; append: $el; $el2: new <span>; append: $el2; add .built;"`,
+                    `act="$d: new <div>; $p: new <p>; $d append: $p; append: $d; *color: 'red'; @data-styled: 'true';"`,
+                    `act="$a: new <b>; $b: new <i>; $c: new <u>; append: $a; append: $b; append: $c; first b remove;"`,
+                    `act="add .a; add .b; add .c; prepend: new <span>; @data-a: '1'; @data-b: '2';"`,
+                    `act="*opacity: '1'; *background-color: '#333'; *padding: '4px'; text_content: 'styled';"`,
+                    `act="$list: new <ol>; append: $list; $list append: new <li>; $list append: new <li>; @data-list: 'true';"`,
+                ],
+            },
+        };
+
+        const container = document.getElementById('bench-container');
+        const resultsBody = document.getElementById('results-body');
+        const profileSelect = document.getElementById('profile');
+        const profileDesc = document.getElementById('profile-desc');
+        let results = [];
+        let runCounter = 0;
+        let isRunning = false;
+
+        profileSelect.addEventListener('change', () => {
+            const p = PROFILES[profileSelect.value];
+            profileDesc.innerHTML = `<strong>${p.name}:</strong> ${p.desc}`;
+        });
+
+        function generateHTML(n, profileKey) {
+            const templates = PROFILES[profileKey].templates;
+            const len = templates.length;
+            const parts = new Array(n);
+            for (let i = 0; i < n; i++) {
+                parts[i] = `<div ${templates[i % len]}></div>`;
+            }
+            return parts.join('');
+        }
+
+        function setRunning(state) {
+            isRunning = state;
+            document.getElementById('running').style.display = state ? 'inline-block' : 'none';
+            document.getElementById('btn-run').disabled = state;
+            document.getElementById('btn-run5').disabled = state;
+        }
+
+        async function singleRun() {
+            const n = parseInt(document.getElementById('count').value) || 1000;
+            const profileKey = profileSelect.value;
+            const profileName = PROFILES[profileKey].name;
+
+            // Clean up previous run
+            container.innerHTML = '';
+
+            // Phase 1: DOM generation
+            const t0 = performance.now();
+            const html = generateHTML(n, profileKey);
+            container.innerHTML = html;
+            const t1 = performance.now();
+
+            // Phase 2: Act initialization (parse + bind + execute)
+            const t2 = performance.now();
+            Act.init(container);
+            // Allow microtasks to settle for async init code
+            await new Promise(r => setTimeout(r, 0));
+            const t3 = performance.now();
+
+            const domTime = t1 - t0;
+            const actTime = t3 - t2;
+            const totalTime = domTime + actTime;
+            const perElement = (totalTime / n) * 1000; // microseconds
+
+            runCounter++;
+            const result = { run: runCounter, n, profile: profileName, profileKey, domTime, actTime, totalTime, perElement };
+            results.push(result);
+
+            return result;
+        }
+
+        function renderResults() {
+            if (results.length === 0) {
+                resultsBody.innerHTML = `<tr><td colspan="7" class="empty-state">No results yet. Click Run to start.</td></tr>`;
+                document.getElementById('chart-area').innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            for (const r of results) {
+                html += `<tr>
+                    <td>${r.run}</td>
+                    <td>${r.n.toLocaleString()}</td>
+                    <td>${r.profile}</td>
+                    <td class="num">${r.domTime.toFixed(2)} ms</td>
+                    <td class="num">${r.actTime.toFixed(2)} ms</td>
+                    <td class="num">${r.totalTime.toFixed(2)} ms</td>
+                    <td class="num">${r.perElement.toFixed(1)} µs</td>
+                </tr>`;
+            }
+
+            // Average row if multiple runs
+            if (results.length > 1) {
+                const avg = (key) => results.reduce((s, r) => s + r[key], 0) / results.length;
+                html += `<tr class="avg-row">
+                    <td>Avg</td>
+                    <td>${results[0].n.toLocaleString()}</td>
+                    <td>${results[0].profile}</td>
+                    <td class="num">${avg('domTime').toFixed(2)} ms</td>
+                    <td class="num">${avg('actTime').toFixed(2)} ms</td>
+                    <td class="num">${avg('totalTime').toFixed(2)} ms</td>
+                    <td class="num">${avg('perElement').toFixed(1)} µs</td>
+                </tr>`;
+            }
+
+            resultsBody.innerHTML = html;
+            renderChart();
+        }
+
+        function renderChart() {
+            if (results.length === 0) return;
+            const maxTotal = Math.max(...results.map(r => r.totalTime));
+
+            let bars = '';
+            for (const r of results) {
+                const domPct = (r.domTime / maxTotal) * 100;
+                const actPct = (r.actTime / maxTotal) * 100;
+                bars += `
+                    <div class="bar-row">
+                        <span class="bar-label">Run ${r.run}</span>
+                        <div class="bar-track">
+                            <div class="bar-fill dom" style="width:${domPct}%; position:absolute;"></div>
+                            <div class="bar-fill act" style="width:${actPct}%; position:absolute; left:${domPct}%;"></div>
+                        </div>
+                        <span class="bar-value">${r.totalTime.toFixed(1)} ms</span>
+                    </div>`;
+            }
+
+            document.getElementById('chart-area').innerHTML = `
+                <div class="chart">
+                    <h3>
+                        <span style="color:#4a7aaa">■</span> DOM Generation
+                        &nbsp;&nbsp;
+                        <span style="color:#5aaa5a">■</span> Act Init
+                    </h3>
+                    <div class="bar-chart">${bars}</div>
+                </div>`;
+        }
+
+        async function runBench(times = 1) {
+            if (isRunning) return;
+            setRunning(true);
+
+            if (times > 1) {
+                results = [];
+                runCounter = 0;
+            }
+
+            for (let i = 0; i < times; i++) {
+                await singleRun();
+                renderResults();
+                if (i < times - 1) {
+                    await new Promise(r => setTimeout(r, 50));
+                }
+            }
+
+            container.innerHTML = '';
+            setRunning(false);
+        }
+
+        function clearResults() {
+            results = [];
+            runCounter = 0;
+            container.innerHTML = '';
+            renderResults();
+        }
+    </script>
+</body>
+
+</html>

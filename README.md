@@ -518,10 +518,10 @@ You can also access and declare global variables using the `global` prefix.
         <script type="text/act" act@click>
             not $Name?
                 alert: 'Please complete your profile first!'
-            else? do
+            ~ do
                 $Name is 'John'? 
                     alert: 'Sorry but John is not allowed to do that.'
-                else? 
+                ~ 
                     alert: 'OK!';
             end;
         </script>
@@ -612,18 +612,18 @@ Arguments are defined in the `act-block` attribute after the block name, using v
         if value.length < 2 or :value is 'John' (
             *border: 5px solid $border_color;
             @invalid: true;
-            {> .field-info}.first! << 'Please enter a valid name';
+            first {> .field-info} << 'Please enter a valid name';
          ) else (
             *border: 1px solid green;
             remove_attribute: invalid;
-            {> .field-info}.first! << empty!;
+            first {> .field-info} << empty!;
         );
     </script>
     
-    <input type="text" act@input="delay: 250ms run check_field firebrick;">
+    <input type="text" act@input="debounce: 250ms run check_field firebrick;">
     <p class="field-info"></p>
     
-    <input type="text" act@input="delay: 250ms run check_field orangered;">
+    <input type="text" act@input="debounce: 250ms run check_field orangered;">
     <p class="field-info"></p>
 </div>
 ```
@@ -701,7 +701,7 @@ The use of targets is useful to target other elements using IDs, classes, tags a
 <button class="toggable" act@click="<div>[0] *background-color: green">
     Make the first square background green
 </button>
-<button class="toggable" act@click="{first .square} *background-color: blue">
+<button class="toggable" act@click="first {.square} *background-color: blue">
     Make the first square background blue
 </button>
 <button class="toggable" act@click="<div> each (*background-color: `rgb({random: 0 255}, {random: 0 255}, {random: 0 255})`)">
@@ -723,7 +723,7 @@ These are the tokens that can be used to finish a sentence and define its mode:
 | **`&`** | Asynchronous | The sentence executes **asynchronously** - the next sentence starts immediately without waiting for this one to complete. |
 | **`>>`** | Forward | Forwards the sentence result as the target of the next sentence (piping). |
 | **`?`** | Condition | Conditional sentence. If the result is truthy, the next sentence executes; if falsy, it's skipped. |
-| **`else?`** | Branch | Conditional branch. Executes if the previous condition was false, skips if it was true. |
+| **`~`** | Branch | Conditional branch. Executes if the previous condition was false, skips if it was true. |
 
 **Examples:**
 
@@ -745,7 +745,7 @@ $a_variable? log: "I'll be logged because $a_variable is true.";
 // Conditional with else
 $a_variable?
     log: "I'll be logged because $a_variable is true."
-else?
+~
     log: "This sentence will be skipped.";
 ```
 
@@ -1178,6 +1178,34 @@ type: [1, 2, 3];
 // Returns 'array'
 ```
 
+#### `first`
+
+Returns the first item in a collection.
+
+Examples:
+
+```act
+first .item *color: red;
+// Selects the first element with class 'item' and sets its color to red.
+
+$my_array: [1 2 3];
+first $my_array; // Returns 1
+```
+
+#### `last`
+
+Returns the last item in a collection.
+
+Examples:
+
+```act
+last .item *color: blue;
+// Selects the last element with class 'item' and sets its color to blue.
+
+$my_array: [1 2 3];
+last $my_array; // Returns 3
+```
+
 #### `wat`
 
 Debug helper that logs detailed information about a value to the console, including its type, value, and origin. The value will be returned.
@@ -1322,6 +1350,8 @@ while $i < 10 (
     $i += 1;
 );
 ```
+
+> If the condition is initially `false`, the body is never executed (same as JavaScript's `while`).
 
 #### `loop`
 
@@ -1556,6 +1586,71 @@ throw new Error 'Custom error';
 // Throws a specific Error instance
 ```
 
+#### `case`
+
+A switch-like keyword for matching a value against multiple options.
+
+Arguments:
+`(value) when (match) (body: Scope) [when (match) (body: Scope) ...] [else (body: Scope)]`
+
+Use `when` for **strict** comparison (`===`) and `like` for **loose** comparison (`==`):
+
+```act
+$color: 'red';
+case $color
+when 'red' (
+    log: 'The color is red!';
+)
+when 'blue' (
+    log: 'The color is blue!';
+)
+else (
+    log: `Unknown color: {$color}`;
+);
+
+// Using "like" for loose comparison (==)
+$value: 1;
+case $value
+like '1' (
+    log: 'Loosely matches the string "1"';
+)
+like true (
+    log: 'Loosely matches true';
+);
+
+// case returns the result of the matched branch
+$message: case $status
+when 'ok' 'All good!'
+when 'error' 'Something went wrong!'
+else 'Unknown status';
+log: $message;
+```
+
+> Unlike JavaScript's `switch`, `case` has **no fall-through behavior** — only the first matching branch executes, and execution continues after the `case` statement.
+
+#### `let`
+
+Declares a variable and sets it to `null`. If the variable already exists in the target scope, it resets it to `null`. It works together with the `global`, `local` and `scoped` prefixes, allowing to declare or nullify a variable at any [data scope](#data-scopes). When no prefix is specified, `let` defaults to the **current scope** (same as `scoped`). If the variable doesn't exist yet, `let` **creates** it.
+
+Arguments:
+`[scope prefix] (variable)`
+
+```act
+let $name;
+// Declares $name and sets it to null.
+
+$name: 'John';
+log: $name;  // Logs 'John'.
+
+let $name;
+log: $name;  // Logs null.
+
+// Works with scope prefixes:
+let global $counter;   // Declares/nullifies $counter at the global scope.
+let local $state;      // Declares/nullifies $state at the element scope.
+let scoped $temp;      // Declares/nullifies $temp at the current scope.
+```
+
 ### Signals
 
 Act has a few statements called signals that can be used to control the execution flow of a scope.
@@ -1660,9 +1755,9 @@ $validate: -> $name (
 );
 ```
 
-#### `delay`
+#### `debounce`
 
-Executes a scope or expression with **debounce**, specifying the time delay as the first argument.
+Executes a scope or expression with **debounce**, specifying the time as the first argument.
 
 Arguments:
 `(duration: dimension) (scope: Scope)`
@@ -1670,7 +1765,7 @@ Arguments:
 Examples:
 
 ```act
-delay 500ms ( log: 'Debounced' );
+debounce 500ms ( log: 'Debounced' );
 ```
 
 #### `lock`
@@ -1722,6 +1817,8 @@ is_locked? log: 'Locked';
 ```
 
 ## Act Library
+
+> The methods listed below are provided by act. Additionally, when calling a method on a value, if the method isn't found in the act library, it **falls through to the native JavaScript prototype** for that value. This means all native JS methods are also available on any value.
 
 ### Element Methods
 
@@ -1811,7 +1908,7 @@ Examples:
 ```act
 #some-element move_to: #new-parent;
 #some-element move_to: #new-parent afterbegin;
-{< p} move_to: <article>.first! beforeend;
+{< p} move_to: first <article> beforeend;
 ```
 
 #### `empty`
@@ -1823,6 +1920,20 @@ _None_
 
 ```act
 #some-element empty!;
+```
+
+#### `clone`
+
+Creates a deep clone of the element (including all descendants).
+
+Arguments:
+_None_
+
+Examples:
+
+```act
+$copy: #some-element.clone!;
+#container append: #template.clone!;
 ```
 
 #### `prepend`
@@ -2060,36 +2171,6 @@ Examples:
 
 ### Object/Collection Methods
 
-#### `first`
-
-Returns the first item in a collection.
-
-Arguments:
-_None_
-
-Examples:
-
-```act
-.item.first! *color: red;
-$my_array: [1 2 3];
-$my_array.first!; // Returns 1
-```
-
-#### `last`
-
-Returns the last item in a collection.
-
-Arguments:
-_None_
-
-Examples:
-
-```act
-.item.last! *color: blue;
-$my_array: [1 2 3];
-$my_array.last!; // Returns 3
-```
-
 #### `move_to`
 
 Moves all elements in the collection to a target element and position. Uses the same position values as the Element method.
@@ -2109,8 +2190,8 @@ Aliases:
 Examples:
 
 ```act
-.item.last! move_to: #container;
-.moved-item.last! move_to: #container prepend;
+last .item move_to: #container;
+last .moved-item move_to: #container prepend;
 ```
 
 ### Array Methods
@@ -2562,6 +2643,22 @@ You can add multiple attributes with multiple events and/or multiple script tags
 </p>
 ```
 
+These events support **event delegation** using the [`on`](#on) keyword with the `matching` option, allowing you to observe visibility changes on child elements:
+
+```html
+<ul id="items">
+    <script type="text/act">
+        on inview matching <li> (add: .seen);
+        on offview matching <li> (remove: .seen);
+    </script>
+    <li>Item 1</li>
+    <li>Item 2</li>
+    <li>Item 3</li>
+</ul>
+```
+
+Each `<li>` element will receive the `.seen` class when it enters the viewport and lose it when it leaves. The observation is set up on child elements that match the selector, and new elements added dynamically will also be observed.
+
 ### The `act` Event
 
 The special `act` event is triggered when Act initializes (on `DOMContentLoaded`). You can use it to run initialization code:
@@ -2578,6 +2675,8 @@ The special `act` event is triggered when Act initializes (on `DOMContentLoaded`
     </script>
 </main>
 ```
+
+The `act` event also fires when new elements are initialized via `Act.init(root)`. This is useful for frameworks like htmx that dynamically load HTML content — newly inserted elements with `act` attributes will have their `act` event triggered upon initialization.
 
 ### Event Modifiers
 
