@@ -1436,6 +1436,7 @@
         <!-- ═══════════════════════════════════════════════════════════════ -->
         <!-- BLOCKS (DEF/RUN) -->
         <!-- ═══════════════════════════════════════════════════════════════ -->
+
         <details class="test-group" open>
             <summary class="group">
                 Blocks (def/run)
@@ -2815,83 +2816,85 @@
                     <div class="name"><code>nested-object-2</code> Nested object</div>
                     <div data-target data-e="deep">
                         <script type="text/act" act>
-                            $obj: [a: [b: [c: 'deep']]];
+                            $obj: [a: [b: [c: 'deep' d: 4] c: 3] b: 1 c: 2];
                             @r: $obj.a.b.c;
                         </script>
                     </div>
                 </div>
 
             </div>
+        </details>
 
-            <script>
-                function filter(mode) {
-                    document.querySelectorAll('.test').forEach(t => {
-                        t.classList.remove('hidden');
-                        if (mode === 'pass' && !t.classList.contains('pass')) t.classList.add('hidden');
-                        if (mode === 'fail' && !t.classList.contains('fail')) t.classList.add('hidden');
-                    });
-                }
+        <script>
+            function filter(mode) {
+                document.querySelectorAll('.test').forEach(t => {
+                    t.classList.remove('hidden');
+                    if (mode === 'pass' && !t.classList.contains('pass')) t.classList.add('hidden');
+                    if (mode === 'fail' && !t.classList.contains('fail')) t.classList.add('hidden');
+                });
+            }
 
-                function toggleAll() {
-                    const details = document.querySelectorAll('.test-group');
-                    const allOpen = [...details].every(d => d.open);
-                    details.forEach(d => d.open = !allOpen);
-                }
+            function toggleAll() {
+                const details = document.querySelectorAll('.test-group');
+                const allOpen = [...details].every(d => d.open);
+                details.forEach(d => d.open = !allOpen);
+            }
 
-                setTimeout(() => {
-                    const tests = document.querySelectorAll('.test');
-                    document.getElementById('s-total').textContent = tests.length;
-                    let pass = 0, fail = 0;
+            setTimeout(() => {
+                const tests = document.querySelectorAll('.test');
+                document.getElementById('s-total').textContent = tests.length;
+                let pass = 0, fail = 0;
 
-                    // Initialize group totals
-                    document.querySelectorAll('.test-group').forEach(group => {
-                        const total = group.querySelectorAll('.test').length;
-                        group.querySelector('.g-total').textContent = total;
-                    });
+                // Initialize group totals
+                document.querySelectorAll('.test-group').forEach(group => {
+                    const total = group.querySelectorAll('.test').length;
+                    group.querySelector('.g-total').textContent = total;
+                });
 
-                    tests.forEach(test => {
-                        const target = test.querySelector('[data-target]');
-                        if (!target) return;
+                tests.forEach(test => {
+                    const target = test.querySelector('[data-target]');
+                    if (!target) return;
 
-                        let checks = 0;
-                        const check = setInterval(() => {
-                            const hasR = target.hasAttribute('r');
-                            const result = hasR ? target.getAttribute('r') : target.innerHTML;
-                            const expected = target.getAttribute('data-e');
+                    let checks = 0;
+                    const check = setInterval(() => {
+                        const hasR = target.hasAttribute('r');
+                        const result = hasR ? target.getAttribute('r') : target.innerHTML;
+                        const expected = target.getAttribute('data-e');
 
-                            // Only complete if we have data or timeout after 3 seconds
-                            if ((hasR || result) || checks > 30) {
-                                clearInterval(check);
-                                const status = test.querySelector('.status');
-                                const info = document.createElement('div');
-                                info.className = 'info';
+                        // Only complete if we have data or timeout after 3 seconds
+                        if ((hasR || result) || checks > 30) {
+                            clearInterval(check);
+                            const status = test.querySelector('.status');
+                            const info = document.createElement('div');
+                            info.className = 'info';
 
-                                // Find parent group for per-group stats
-                                const group = test.closest('.test-group');
-                                const gPass = group?.querySelector('.g-pass');
-                                const gFail = group?.querySelector('.g-fail');
+                            // Find parent group for per-group stats
+                            const group = test.closest('.test-group');
+                            const gPass = group?.querySelector('.g-pass');
+                            const gFail = group?.querySelector('.g-fail');
 
-                                if (result === expected) {
-                                    test.classList.add('pass');
-                                    status.textContent = '✓';
-                                    pass++;
-                                    if (gPass) gPass.textContent = parseInt(gPass.textContent) + 1;
-                                } else {
-                                    test.classList.add('fail');
-                                    status.textContent = '✗';
-                                    info.textContent = `Expected: ${expected}, Got: ${result || 'timeout'}`;
-                                    test.appendChild(info);
-                                    fail++;
-                                    if (gFail) gFail.textContent = parseInt(gFail.textContent) + 1;
-                                }
-                                document.getElementById('s-pass').textContent = pass;
-                                document.getElementById('s-fail').textContent = fail;
+                            if (result === expected) {
+                                test.classList.add('pass');
+                                status.textContent = '✓';
+                                pass++;
+                                if (gPass) gPass.textContent = parseInt(gPass.textContent) + 1;
+                            } else {
+                                test.classList.add('fail');
+                                status.textContent = '✗';
+                                info.textContent = `Expected: ${expected}, Got: ${result || 'timeout'}`;
+                                test.appendChild(info);
+                                fail++;
+                                if (gFail) gFail.textContent = parseInt(gFail.textContent) + 1;
                             }
-                            checks++;
-                        }, 100);
-                    });
-                }, 800);
-            </script>
+                            document.getElementById('s-pass').textContent = pass;
+                            document.getElementById('s-fail').textContent = fail;
+                        }
+                        checks++;
+                    }, 100);
+                });
+            }, 800);
+        </script>
+    </div>
 </body>
 
 </html>

@@ -1,6 +1,6 @@
 # act
 
-> ![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
+> ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 > [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ```html
@@ -48,6 +48,7 @@
     - [Key Modifiers](#key-modifiers)
     - [Event Aliases](#event-aliases)
     - [Custom Events](#custom-events)
+    - [Lifecycle Events](#lifecycle-events)
 - [Advanced](#advanced)
     - [Configuration](#configuration)
     - [Extending the library methods](#extending-the-library-methods)
@@ -2769,6 +2770,100 @@ Or from Act code using the `trigger` method:
 ```
 
 The event data is available in Act code through the `$event` variable, and you can access `$event.detail` to get custom data.
+
+### Lifecycle Events
+
+act dispatches several **custom DOM events** throughout the execution lifecycle, allowing you to hook into its behaviour. All events bubble.
+
+#### `actready`
+
+Dispatched on `document.body` once when act finishes initializing (after all elements have been scanned and bound). Equivalent to `DOMContentLoaded` but for act.
+
+```js
+document.addEventListener('actready', (e) => {
+    console.log('Act ready. Bound nodes:', e.detail.bindedNodes);
+});
+```
+
+| Property | Description |
+| --- | --- |
+| `detail.bindedNodes` | Array of DOM elements that were bound during initialization. |
+
+#### `actbind`
+
+Dispatched on each element immediately after act has processed and bound it.
+
+```js
+document.addEventListener('actbind', (e) => {
+    console.log('Element bound:', e.detail.element, e.detail.binding);
+});
+```
+
+| Property | Description |
+| --- | --- |
+| `detail.element` | The DOM element that was bound. |
+| `detail.binding` | The `Binding` object attached to the element. |
+
+#### `actstart`
+
+Dispatched on the **target element** every time an act event handler begins executing. Fires before the code runs.
+
+```js
+document.addEventListener('actstart', (e) => {
+    e.target.setAttribute('aria-busy', 'true');
+});
+```
+
+| Property | Description |
+| --- | --- |
+| `detail.event` | The triggering DOM event (or `null` for the `act` initialization event). |
+| `detail.source` | The act `Source` object (holds the raw code and element reference). |
+| `detail.eventManager` | The act `EventManager` instance managing this handler. |
+
+#### `actend`
+
+Dispatched on the **target element** whenever an act event handler finishes executing — whether it completed successfully, was halted, or threw an error. Always fires.
+
+```js
+document.addEventListener('actend', (e) => {
+    e.target.removeAttribute('aria-busy');
+});
+```
+
+Shares the same `detail` properties as `actstart`.
+
+#### `acterror`
+
+Dispatched on the **target element** when an act event handler throws a runtime error.
+
+```js
+document.addEventListener('acterror', (e) => {
+    console.error('Act error:', e.detail.error);
+});
+```
+
+| Property | Description |
+| --- | --- |
+| `detail.error` | The JavaScript error that was thrown. If it is an `ActRuntimeError`, `detail.error.actException` holds the original cause and `detail.error.actTrace` holds the act stack trace. |
+| `detail.event` | The triggering DOM event. |
+| `detail.source` | The act `Source` object. |
+| `detail.eventManager` | The act `EventManager` instance. |
+
+#### `actscriptloaded`
+
+Dispatched on the **parent element** of a `<script type="text/act" src="...">` tag once its source has been fetched and is ready to run.
+
+```js
+document.addEventListener('actscriptloaded', (e) => {
+    console.log('External act script loaded:', e.detail.element);
+});
+```
+
+| Property | Description |
+| --- | --- |
+| `detail.element` | The `<script>` element whose source was loaded. |
+| `detail.target` | The parent element of the script. |
+| `detail.binding` | The `Binding` object of the parent element. |
 
 ## Advanced
 

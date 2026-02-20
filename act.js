@@ -2568,6 +2568,7 @@
 
             const binding = this.from(element, true);
             this.bindAttributes(element, binding);
+            element.dispatchEvent(new CustomEvent('actbind', { bubbles: true, detail: { element, binding } }));
         },
 
         bindScript(element) {
@@ -2580,7 +2581,7 @@
                         element.src, { method: 'GET', headers: { 'Content-Type': 'text/plain' } }
                     ).then(response => response.text());
                     const source = new Source(element.attributes.src, 'externalScript', code);
-                    if (Act.config.start) target.dispatchEvent(new Event('actscriptloaded', { detail: { element } }));
+                    if (Act.config.start) target.dispatchEvent(new CustomEvent('actscriptloaded', { bubbles: true, detail: { element, target, binding } }));
                     binding.addEvent('act', source);
                 })();
             }
@@ -2644,10 +2645,17 @@
                 './/script[@type = "text/act"] | .//*[@act] | .//*[@*[starts-with(name(), "act@")]]',
             ).evaluate(root, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
+            const bindedNodes = [];
+
             for (let i = 0; i < xpath.snapshotLength; i++) {
                 const node = xpath.snapshotItem(i);
-                if (!this.from(node) || force) this.bind(node);
+                if (!this.from(node) || force) {
+                    this.bind(node);
+                    bindedNodes.push(node);
+                }
             }
+
+            return bindedNodes;
         }
     };
 
@@ -2782,6 +2790,11 @@
             if (this.lock) return;
             const context = new Context(target, this.binding, event, this, this.source);
 
+            target.dispatchEvent(new CustomEvent('actstart', {
+                bubbles: true,
+                detail: { event, source: this.source, eventManager: this },
+            }));
+
             try {
                 this.attach(context);
                 context.scopeData(this.scope).event = event;
@@ -2850,8 +2863,17 @@
                     
                     console.groupEnd();
                 }
+
+                target.dispatchEvent(new CustomEvent('acterror', {
+                    bubbles: true,
+                    detail: { error: e, event, source: this.source, eventManager: this },
+                }));
             } finally {
                 this.detach(context);
+                target.dispatchEvent(new CustomEvent('actend', {
+                    bubbles: true,
+                    detail: { event, source: this.source, eventManager: this },
+                }));
             }
         }
 
@@ -2952,12 +2974,13 @@
         start() {
             if (this.config.startTime) console.time('act start');
             new Binding(window);
-            this.init(document.body, true);
+            const bindedNodes = this.init(document.body, true);
             if (this.config.startTime) console.timeEnd('act start');
+            document.body.dispatchEvent(new CustomEvent('actready', { bubbles: true, detail: { bindedNodes } }));
         },
 
         init(root, bindRoot, force) {
-            Binder.scan(root, bindRoot, force);
+            return Binder.scan(root, bindRoot, force);
         },
 
         run(target, code) {

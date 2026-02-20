@@ -14,6 +14,7 @@
         return false;
     };
 
+    const isActFunction = (value) => is(value, Function) && value[ACT_FUNCTION];
     const unwrap = (value) => is(value, Result) ? value.value : value;
     const unwrapAll = (values) => values.map(unwrap);
     const from = (value) => is(value, Result) ? value.from : undefined;
@@ -33,19 +34,18 @@
         return key;
     };
 
-    const regexEscape = (str) => { return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); };
+    const regexEscape = (str) => { 
+        return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); 
+    };
 
     // LIBRARY (Built-in functions)
 
-    const Library = {
-        ActMethod: class ActMethod {
-            constructor(method) {
-                this.method = method;
-            }
-        },
+    const ACT_FUNCTION = Symbol('actFunction');
 
+    const Library = {
         method(fn) {
-            return new Library.ActMethod(fn);
+            fn[ACT_FUNCTION] = true;
+            return fn;
         },
 
         get(name, target) {
@@ -62,7 +62,7 @@
 
         async exec(fn, args, target, context, opts) {
             if (is(fn, Result)) return await this.exec(fn.value, args, fn.parent, fn.context || context, opts);
-            if (is(fn, Library.ActMethod)) return await fn.method(context, target, opts, ...args);
+            if (isActFunction(fn)) return await fn(context, target, opts, ...args);
             if (is(fn, Function)) return await fn.call(target, ...await context.solveAll(args, target));
         },
     };
@@ -84,6 +84,15 @@
     };
 
     Library.prefixes = {
+        async first(ctx, target, opts, value) {
+            return (await ctx.asValueOf(value, target, opts))[0];
+        },
+
+        async last(ctx, target, opts, value) {
+            const result = await ctx.asValueOf(value, target, opts);
+            return result[result.length - 1];
+        },
+
         global(ctx, target, opts, value) {
             return new Result(Act.globals[value.value], this, { parent: Act.globals, key: value.value });
         },
@@ -117,6 +126,7 @@
                 '🤷 Act WAT?\n',
                 'Value:', value, '\n',
                 'Result:', result, '\n',
+                'Unwrapped Result:', unwrap(result), '\n',
                 'Target:', target, '\n',
                 'Scope:', this.scope, '\n',
                 'Context:', ctx, '\n',
@@ -127,16 +137,44 @@
         },
     };
 
-    const throwSignal = async (Signal, ctx, target, opts, data) => {
-        const signal = new Signal;
-        if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
-        throw signal;
-    };
-
     Library.keywords = {
+        async case(ctx, target, opts, [value, ...args]) {
+            const testValue = await ctx.asValueOf(value, target, opts);
+            
+            for (let i = 0; i < args.length; i++) {
+                const keyword = args[i];
+                
+                if (!is(keyword, Word)) return;
+                if (keyword.value === 'when') {
+                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
+                    const scope = args[++i];
+                    if (testValue === matchValue) return await ctx.solve(scope, target, opts);
+                } else if (keyword.value === 'like') {
+                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
+                    const scope = args[++i];
+                    if (testValue == matchValue) return await ctx.solve(scope, target, opts);
+                } else if (keyword.value === 'else') {
+                    return await ctx.solve(args[++i], target, opts);
+                }
+            }
+            
+        },
+
+        async let(ctx, target, opts, [value]) {
+            value = await ctx.solve(value, target, opts);
+            
+            if (!is(value, Result)) {
+                const parent = ctx.scopeData(this.scope);
+                value = new Result(null, this, { parent, key: value.value });
+            }
+
+            value.set(null);
+            return value;
+        },
+
         async run(ctx, target, opts, [name, ...args]) {
             name = await ctx.asString(name, target);
-            const block = ctx.binding.getBlock(name);
+            const block = ctx.binding.getBlock(name) ?? Binder.from(target).getBlock(name);
             if (!block) throw new ActError(`Block '${name}' not found.`);
 
             const data = ctx.scopeData(block.scope);
@@ -178,8 +216,9 @@
                 for (const [key, value] of Object.entries(iterable)) {
                     ctx.scopeData(solvable)[args[0].value] = key;
                     ctx.scopeData(solvable)[args[1].value] = value;
-                    try { await ctx.solve(solvable, iterable, opts); }
-                    catch (e) {
+                    try { 
+                        await ctx.solve(solvable, iterable, opts); 
+                    } catch (e) {
                         if (is(e, Signal.Break)) return e.data;
                         if (is(e, Signal.Continue)) continue;
                         throw e;
@@ -204,14 +243,18 @@
             const name = args[0].value;
             let idx = 1, start = 0;
 
-            if (args[idx].value === 'from') { start = await ctx.asValueOf(args[2], target); idx += 2; }
+            if (args[idx]?.value === 'from') { 
+                start = await ctx.asValueOf(args[2], target); 
+                idx += 2; 
+            }
+
             if (args[idx].value !== 'to') throw new ActError('Invalid for loop syntax: missing "to" word.');
 
             const end = await ctx.asValueOf(args[idx + 1], target);
             idx += 2;
 
             let step = 1, stepDefined = false;
-            if (args[idx].value == 'step') {
+            if (args[idx]?.value == 'step') {
                 step = await ctx.asValueOf(args[idx + 1], target);
                 stepDefined = true;
             }
@@ -238,8 +281,9 @@
 
         async loop(ctx, target, opts, [solvable]) {
             for (;;) {
-                try { await ctx.solve(solvable, target, opts); }
-                catch (e) {
+                try { 
+                    await ctx.solve(solvable, target, opts); 
+                } catch (e) {
                     if (is(e, Signal.Break)) return e.data;
                     if (is(e, Signal.Continue)) continue;
                     throw e;
@@ -251,19 +295,67 @@
             if (is(constructor, Tag)) return document.createElement(constructor.value);
             let value = await ctx.asValueOf(constructor, target);
             args = await ctx.solveAll(args, target, opts);
-            try { return new value(...args); }
-            catch (e) { return new window[value.toString()](...args); }
+
+            try { 
+                return new value(...args); 
+            } catch (e) { 
+                return new window[value.toString()](...args); 
+            }
         },
 
-        async on(ctx, target, opts, [eventName, ...args]) {
+        async on(ctx, target, opts, [eventNameOrAlias, ...args]) {
             target = await ctx.asValueOf(target);
-            eventName = Binder.eventName(await ctx.asString(eventName, target));
-            let options = {};
-            if (is(args[0], ActObject)) options = await ctx.asValueOf(args[0], target);
+            let eventName, alias;
 
-            const binding = Binder.from(target, true), eventScope = args.at(-1);
-            const eventManager = new EventManager(binding, eventName, options, eventScope.source, eventScope);
-            binding.addEvent(eventName, eventScope.source, options, eventManager);
+            if (is(eventNameOrAlias, ActObject)) {
+                const obj = await ctx.asValueOf(eventNameOrAlias, target);
+                const keys = Object.keys(obj);
+                alias = keys[0];
+                eventName = Binder.eventName(obj[alias].toString());
+            } else {
+                eventName = Binder.eventName(await ctx.asString(eventNameOrAlias, target));
+            }
+
+            let options = {}, matchingSelector = null;
+            const eventScope = args.at(-1);
+
+            for (let i = 0; i < args.length - 1; i++) {
+                const arg = args[i];
+
+                if (is(arg, Word)) {
+                    const argValue = arg.value;
+                    if (argValue === 'matching') {
+                        matchingSelector = await ctx.asString(args[++i], target);
+                    } else {
+                        options[argValue] = true;
+                    }
+                } else if (is(arg, ActObject)) {
+                    Object.assign(options, await ctx.asValueOf(arg, target));
+                }
+            }
+
+            const binding = Binder.from(target, true);
+            const em = new EventManager(binding, eventName, options, eventScope.source, eventScope);
+            const isIntersectEvent = Object.keys(Binder.INTERSECT_EVENTS).includes(eventName);
+
+            if (matchingSelector) {
+                if (isIntersectEvent) {
+                    options.matchingSelector = matchingSelector;
+                } else {
+                    em.listener = (e) => {
+                        let el = e.target;
+                        while (el && el !== target) {
+                            if (el.matches(matchingSelector)) return em.run(el, e);
+                            el = el.parentElement;
+                        }
+                        if (target.matches(matchingSelector) && el === target) return em.run(target, e);
+                    };
+                }
+            }
+
+            if (alias) em.alias = alias;
+
+            binding.addEvent(eventName, eventScope.source, options, em);
             return true;
         },
 
@@ -273,7 +365,14 @@
             if (!binding) return false;
 
             eventName = Binder.eventName(await ctx.asString(eventName, target));
-            binding.element.removeEventListener(eventName, binding.events[eventName].listener);
+            const em = binding.events[eventName];
+            if (!em) return false;
+            if (em.observer) {
+                if (em.observer.intersectionObserver) em.observer.intersectionObserver.disconnect();
+                if (em.observer.mutationObserver) em.observer.mutationObserver.disconnect();
+            }
+
+            binding.element.removeEventListener(eventName, em.listener);
             delete binding.events[eventName];
             return true;
         },
@@ -293,16 +392,22 @@
             return false;
         },
 
-        break(ctx, target, opts, [data]) {
-            return throwSignal(Signal.Break, ctx, target, opts, data);
+        async break(ctx, target, opts, [data]) {
+            const signal = new Signal.Break;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
         },
 
-        stop(ctx, target, opts, [data]) {
-            return throwSignal(Signal.Stop, ctx, target, opts, data);
+        async stop(ctx, target, opts, [data]) {
+            const signal = new Signal.Stop;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
         },
 
-        return(ctx, target, opts, [data]) {
-            return throwSignal(Signal.Return, ctx, target, opts, data);
+        async return(ctx, target, opts, [data]) {
+            const signal = new Signal.Return;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
         },
 
         repeat() {
@@ -343,6 +448,48 @@
             await ctx.solve(body, unwrap(withTarget), opts);
             return withTarget;
         },
+
+        async debounce(ctx, target, opts, [time, scope]) {
+            clearTimeout(scope.__debounceTimeout__ || 0);
+            const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
+
+            return new Promise(resolve => {
+                scope.__debounceTimeout__ = setTimeout(async () => {
+                    resolve(await ctx.solve(scope, target, opts));
+                    delete scope.__debounceTimeout__;
+                }, ms);
+            });
+        },
+
+        async lock(ctx, target, opts, args) {
+            if (args.length === 0) return ctx.eventManager.lock = true;
+            const arg0 = await ctx.asValueOf(args[0], target);
+            if (typeof arg0 === 'boolean') return ctx.eventManager.lock = arg0;
+
+            const binding = Binder.from(target);
+            if (!binding) return null;
+            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
+            if (!em) return null;
+
+            em.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
+            return true;
+        },
+
+        async unlock(ctx, target, opts, args) {
+            if (args.length === 0) return !(ctx.eventManager.lock = false);
+            const binding = Binder.from(target);
+            if (!binding) return null;
+            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
+            if (em) em.lock = false;
+            return true;
+        },
+
+        async is_locked(ctx, target, opts, args) {
+            if (args.length === 0) return ctx.eventManager.lock;
+            const binding = Binder.from(target);
+            if (!binding) return null;
+            return binding.events[Binder.eventName(await ctx.asString(args[0], target))]?.lock;
+        },
     };
 
     Library.globals = {
@@ -368,7 +515,9 @@
             await new Promise(r => requestAnimationFrame(r));
         },
 
-        wait(time) { return new Promise(r => setTimeout(r, Library.globals.time_to_ms(time))); },
+        wait(time) { 
+            return new Promise(r => setTimeout(r, Library.globals.time_to_ms(time))); 
+        },
 
         log_raw: (...args) => console.log(...args),
         log: (...args) => console.log(...unwrapAll(args)),
@@ -383,58 +532,18 @@
         },
 
         random(min, max) {
-            const rand = Math.random() * (max - min + 1) + min;
-            return (min % 1 + max % 1 == 0) ? Math.floor(rand) : rand;
+            min = Number(min) || 0;
+            max = Number(max) || 0;
+            if (Number.isInteger(min) && Number.isInteger(max)) return Math.floor(Math.random() * (max - min + 1)) + min;
+            return Math.random() * (max - min) + min;
         },
-
-        delay: Library.method(async function (ctx, target, opts, time, scope) {
-            clearTimeout(scope.__delayTimeout__ || 0);
-            const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
-
-            return new Promise(resolve => {
-                scope.__delayTimeout__ = setTimeout(async () => {
-                    resolve(await ctx.solve(scope, target, opts));
-                    delete scope.__delayTimeout__;
-                }, ms);
-            });
-        }),
-
-        lock: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return ctx.eventManager.lock = true;
-            const arg0 = await ctx.asValueOf(args[0], target);
-            if (typeof arg0 === 'boolean') return ctx.eventManager.lock = arg0;
-
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
-            if (!em) return null;
-
-            em.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
-            return true;
-        }),
-
-        unlock: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return !(ctx.eventManager.lock = false);
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
-            if (em) em.lock = false;
-            return true;
-        }),
-
-        is_locked: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return ctx.eventManager.lock;
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            return binding.events[Binder.eventName(await ctx.asString(args[0], target))]?.lock;
-        }),
     };
 
     Library.Array = (function () {
         const wrap = (op) => Library.method(async (ctx, target, opts, fn) => {
             fn = await ctx.solve(fn, target, opts);
-            const exec = (i) => is(fn, Library.ActMethod)
-                ? fn.method(ctx, target[i], opts, target[i], i, target)
+            const exec = (i) => isActFunction(fn)
+                ? fn(ctx, target[i], opts, target[i], i, target)
                 : fn(target[i], i, target);
 
             if (op === 'map') return Promise.all(target.map((_, i) => exec(i)));
@@ -465,9 +574,9 @@
         };
     })();
 
-    const extractActValue = (source) => {
+    const classifyValue = (source) => {
         const val = from(through(source)), isClass = is(val, ActClass), isAttribute = is(val, Attribute);
-        return { isClass, isAttribute, name: (isClass || isAttribute) ? val.value : (unwrap(source) ?? '').toString() };
+        return { isClass, isAttribute, name: isClass? val.value.slice(1) : val.value };
     };
 
     const sanitizeHTML = (html) => {
@@ -478,8 +587,8 @@
 
     const insertContent = (element, content, position) => {
         const val = unwrap(content);
-        if (is(val, Element)) position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
-        else element.insertAdjacentHTML(position, sanitizeHTML(val.toString()));
+        if (is(val, Element, DocumentFragment)) position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
+        else element.insertAdjacentHTML(position, sanitizeHTML(val));
         return element;
     };
 
@@ -509,7 +618,7 @@
 
         const op = ops[mode] || ops.beforeend;
         if (mode === 'afterbegin') list.reverse();
-        list.forEach(n => op(n));
+        for (const n of list) op(n);
         if (mode === 'outerhtml') target.remove();
 
         return nodes;
@@ -517,15 +626,27 @@
 
     const findSibling = (element, selector, forward) => {
         if (!selector) return forward ? element.nextElementSibling : element.previousElementSibling;
-        let all;
-        if (typeof selector === 'string') all = document.querySelectorAll(selector);
-        else if (is(selector, Element)) all = [selector];
-        else if (is(selector, NodeList) || Array.isArray(selector)) all = selector;
-        else all = document.querySelectorAll(selector.toString());
+        if (is(selector, Element)) return selector;
 
-        const mask = forward ? 4 : 2;
-        if (forward) { for (const n of all) if (element.compareDocumentPosition(n) & mask) return n; }
-        else { for (let i = all.length - 1; i >= 0; i--) if (element.compareDocumentPosition(all[i]) & mask) return all[i]; }
+        if (is(selector, NodeList) || Array.isArray(selector)) {
+            const mask = forward ? 4 : 2;
+            if (forward) {
+                for (const n of selector)
+                    if (element.compareDocumentPosition(n) & mask) return n;
+            } else {
+                for (let i = selector.length - 1; i >= 0; i--)
+                    if (element.compareDocumentPosition(selector[i]) & mask) return selector[i];
+            }
+            return null;
+        }
+
+        const s = typeof selector === 'string' ? selector : selector.toString();
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+        walker.currentNode = element;
+        let node;
+        while (node = forward ? walker.nextNode() : walker.previousNode()) {
+            if (node.matches(s)) return node;
+        }
         return null;
     };
 
@@ -545,17 +666,19 @@
         transition(...args) {
             let css = '', wait = 0, style = {}, og = this.style.transition;
             while (args.length) {
-                let dur = 0, time = '', del = 0, prop = args.shift().toString();
+                let duration = 0, time = '', delay = 0, prop = args.shift().toString();
                 const next = () => args.shift().toString();
                 const handlers = {
-                    from: () => this.style[prop] = next(), to: () => style[prop] = next(),
-                    in: () => dur = Library.globals.time_to_ms(next()), using: () => time = next(),
-                    after: () => del = Library.globals.time_to_ms(next())
+                    from: () => this.style[prop] = next(), 
+                    to: () => style[prop] = next(),
+                    in: () => duration = Library.globals.time_to_ms(next()), 
+                    using: () => time = next(),
+                    after: () => delay = Library.globals.time_to_ms(next())
                 };
                 while (args.length && handlers[args[0]]) handlers[args.shift()]();
 
-                wait = Math.max(wait, del + dur);
-                css += `${css ? ', ' : ''}${prop} ${dur}ms${time ? ' ' + time : ''}${del ? ' ' + del + 'ms' : ''}`;
+                wait = Math.max(wait, delay + duration);
+                css += `${css ? ', ' : ''}${prop} ${duration}ms${time ? ' ' + time : ''}${delay ? ' ' + delay + 'ms' : ''}`;
             }
             this.style.transition = css;
             Object.assign(this.style, style);
@@ -575,6 +698,10 @@
             this.replaceChildren();
         },
 
+        clone() {
+            return this.cloneNode(true);
+        },
+
         prepend(c) {
             return insertContent(this, c, 'afterbegin');
         },
@@ -590,24 +717,6 @@
             ).finished.then(() => {
                 this.style.opacity = inout === 'in' ? '1' : '0';
             });
-        },
-
-        remove: Library.method(async function (ctx, target, opts, ...args) {
-            for (const value of args) {
-                if (value === undefined) return target.parentNode?.removeChild(target);
-                if (is(value, ActClass)) target.classList.remove(value.value.slice(1));
-                else if (is(value, Attribute)) target.removeAttribute(value.value);
-            }
-
-            return target;
-        }),
-
-        collapse(time = 250, timing = 'linear') {
-            const style = window.getComputedStyle(this), h = this.offsetHeight;
-            const props = ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];
-            const kf = [{ height: h + 'px' }, { height: '0px' }];
-            props.forEach(p => { kf[0][p] = style[p]; kf[1][p] = '0px'; kf[0].overflow = kf[1].overflow = 'hidden'; });
-            return this.animate(kf, { duration: Library.globals.time_to_ms(time), easing: timing }).finished.then(() => this.remove());
         },
 
         is_in_view(partially = false) {
@@ -629,76 +738,75 @@
             return this.parentNode;
         },
 
-        on_match: Library.method(async function (ctx, target, opts, eventName, selector, scope) {
-            eventName = Binder.eventName(await ctx.asString(eventName, target));
-            selector = await ctx.asString(selector, target);
-            const binding = Binder.from(target, true);
-            const em = new EventManager(binding, eventName, {}, scope.source, scope);
+        take(value, parent = this.parentNode) {
+            const { isClass, isAttribute, name } = classifyValue(value);
 
-            em.listener = (e) => {
-                let el = e.target;
-                while (el && el !== target) {
-                    if (el.matches(selector)) return em.run(el, e);
-                    el = el.parentElement;
+            if (isClass) {
+                for (const elt of unwrap(parent).querySelectorAll('.' + name)) {
+                    elt.classList.remove(name);
                 }
-                if (target.matches(selector) && el === target) return em.run(target, e);
-            };
 
-            binding.addEvent(eventName, scope.source, {}, em);
-            return true;
-        }),
+                this.classList.add(name);
+            } else if (isAttribute) {
+                let attributeValue = '';
+                for (const elt of unwrap(parent).querySelectorAll(`[${name}]`)) {
+                    attributeValue = elt.getAttribute(name);
+                    elt.removeAttribute(name);
+                }
 
-        take(attrOrCls, sel) {
-            const els = sel ? (is(unwrap(sel), NodeList) ? unwrap(sel) : [unwrap(sel)]) : [...(this.parentNode?.children || [])].filter(c => c !== this);
-            const { isClass, isAttribute, name } = extractActValue(attrOrCls);
-            els.forEach(el => {
-                if (isAttribute && el.hasAttribute(name)) { this.setAttribute(name, el.getAttribute(name)); el.removeAttribute(name); }
-                if (isClass && el.classList.contains(name.slice(1))) { this.classList.add(name.slice(1)); el.classList.remove(name.slice(1)); }
-            });
+                this.setAttribute(name, attributeValue);
+            } else {
+                throw new ActError('Invalid value');
+            }
+
             return this;
         },
 
-        toggle: Library.method(async function (ctx, target, opts, ...args) {
-            if (args.length === 0) return (target.style.display === 'none') ? Library.Element.show.call(target) : Library.Element.hide.call(target);
-            const [value, force] = args;
-            const solved = await ctx.solve(value, target);
-            const { isClass, isAttribute, name } = extractActValue(solved);
-            let solvedForce = force ? unwrap(await ctx.solve(force, target)) : undefined;
-
-            if (isClass) return target.classList.toggle(name.slice(1), solvedForce);
-            if (isAttribute) return target.toggleAttribute(name, solvedForce);
-            if (solvedForce !== undefined) return solvedForce ? Library.Element.show.call(target) : Library.Element.hide.call(target);
-            return (target.style.display === 'none') ? Library.Element.show.call(target) : Library.Element.hide.call(target);
-        }),
-
-        add: Library.method(async function (ctx, target, opts, ...args) {
-            for (const value of args) {
-                if (is(value, ActClass)) target.classList.add(value.value.slice(1));
-                else if (is(value, Attribute)) target.setAttribute(value.value, '');
+        toggle(value, force) {
+            if (value === undefined) {
+                return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
             }
 
-            return target;
-        }),
+            const { isClass, isAttribute, name } = classifyValue(value);
+            const solvedForce = force !== undefined ? unwrap(force) : undefined;
 
-        has: Library.method(async function (ctx, target, opts, value) {
-            const { isClass, isAttribute, name } = extractActValue(await ctx.solve(value, target));
-            if (isClass) return target.classList.contains(name.slice(1));
-            if (isAttribute) return target.hasAttribute(name);
-            return target.matches(name);
-        }),
+            if (isClass) return this.classList.toggle(name, solvedForce);
+            if (isAttribute) return this.toggleAttribute(name, solvedForce);
+            if (solvedForce !== undefined) return solvedForce ? Library.Element.show.call(this) : Library.Element.hide.call(this);
+            return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
+        },
+
+        add(...args) {
+            for (const value of args) {
+                const { isClass, isAttribute, name } = classifyValue(value);
+                if (isClass) this.classList.add(name);
+                else if (isAttribute) this.setAttribute(name, '');
+            }
+            return this;
+        },
+
+        has(value) {
+            const { isClass, isAttribute, name } = classifyValue(value);
+            if (isClass) return this.classList.contains(name);
+            if (isAttribute) return this.hasAttribute(name);
+            return this.matches(name);
+        },
+
+        remove(...args) {
+            if (args.length === 0) return this.parentNode?.removeChild(this);
+
+            for (const value of args) {
+                const { isClass, isAttribute, name } = classifyValue(value);
+                if (isClass) this.classList.remove(name);
+                else if (isAttribute) this.removeAttribute(name);
+            }
+            return this;
+        },
     };
 
     Library.function = {};
 
     Library.object = {
-        first() {
-            if ((Array.isArray(this) || is(this, HTMLCollection, NodeList)) && this.length > 0) return this[0];
-        },
-
-        last() {
-            if ((Array.isArray(this) || is(this, HTMLCollection, NodeList)) && this.length > 0) return this[this.length - 1];
-        },
-
         move_to(el, pos) {
             return moveContent(this, el, pos);
         },
@@ -714,17 +822,22 @@
             const i = self.indexOf(s);
             return i === -1 ? self : self.substring(i + s.length);
         },
+
         before(str) {
             const [self, s] = [this.toString(), str.toString()];
             const i = self.indexOf(s);
             return i === -1 ? self : self.substring(0, i);
         },
+
         between(start, end) {
             const [self, s, e] = [this.toString(), start.toString(), end.toString()];
             const i = self.indexOf(s);
             return i === -1 ? self : self.substring(i + s.length, self.indexOf(e));
         },
-        capitalize() { return this.toString().charAt(0).toUpperCase() + this.toString().slice(1); },
+
+        capitalize() { 
+            return this.toString().charAt(0).toUpperCase() + this.toString().slice(1); 
+        },
     };
 
     Library.symbol = {};
@@ -795,12 +908,6 @@
         }
     }
 
-    class IdResult extends ComplexResult {
-        get value() {
-            return document.getElementById(this._value.slice(1));
-        }
-    }
-
     class SelectorResult extends ComplexResult {
         get value() {
             if (this.mode === 'closest') return this.parent.closest(this._value);
@@ -813,6 +920,12 @@
 
         valueOf() {
             return this.value;
+        }
+    }
+
+    class IdResult extends SelectorResult {
+        get value() {
+            return document.getElementById(this._value.slice(1));
         }
     }
 
@@ -850,9 +963,13 @@
             );
         }
 
-        get code() { return this.source.code.substring(this.tokenStart.index, this.tokenEnd.indexEnd); }
+        get code() { 
+            return this.source.code.substring(this.tokenStart.index, this.tokenEnd.indexEnd); 
+        }
 
-        solve() { return this.value; }
+        solve() { 
+            return this.value; 
+        }
 
         solveDebug(ctx, target, result) {
             console.log(
@@ -1000,16 +1117,18 @@
 
     class Property extends Solvable {
         solve(ctx, target) {
+            let key = this.value;
+
             if (target === null || target === undefined) {
-                return new Result(undefined, this, { parent: target, key: this.value });
+                return new Result(undefined, this, { parent: target, key });
             }
 
             if (Act.config.convertToCamelCase) {
-                const camelKey = snakeToCamel(this.value);
-                if (target[camelKey] !== undefined) this.value = camelKey;
+                const camelKey = snakeToCamel(key);
+                if (target[camelKey] !== undefined) key = camelKey;
             }
 
-            return new Result(target[this.value], this, { parent: target, key: this.value });
+            return new Result(target[key], this, { parent: target, key });
         }
     }
 
@@ -1081,11 +1200,14 @@
             if (selector.startsWith('> ')) {
                 selectorTarget = target;
                 selector = selector.slice(2);
+                if (selectorTarget.querySelector(selector) === null) return null;
             } else if (selector.startsWith('< ')) {
                 selectorTarget = is(target, Element) ? target : ctx.target;
+                if (selectorTarget.closest(selector.slice(2)) === null) return null;
                 return new SelectorResult(selector.slice(2), this, { parent: selectorTarget, mode: 'closest' });
             }
 
+            if (selectorTarget.querySelector(selector) === null) return null;
             return new SelectorResult(selector, this, { parent: selectorTarget });
         }
     }
@@ -1173,7 +1295,9 @@
                         target = result;
                     }
                 } catch (e) {
-                    if (is(e, Signal.Stop)) { return e.data; } else if (is(e, Signal.Repeat) || (this.isRoot() && is(e, Signal.Restart))) {
+                    if (is(e, Signal.Stop)) { 
+                        return e.data; 
+                    } else if (is(e, Signal.Repeat) || (this.isRoot() && is(e, Signal.Restart))) {
                         i = -1;
                     } else {
                         throw e;
@@ -1189,7 +1313,9 @@
             let scope = this;
             while (scope) {
                 const scopeData = ctx.scopeData(scope);
-                if (scopeData[key] !== undefined) { return new Result(scopeData[key], scope, { parent: scopeData, key }); }
+                if (scopeData[key] !== undefined) { 
+                    return new Result(scopeData[key], scope, { parent: scopeData, key }); 
+                }
 
                 if (is(scopeData.__fromScope__, this.constructor)) {
                     scope = scopeData.__fromScope__;
@@ -1316,12 +1442,12 @@
     }
 
     async function resolveAndCallFunction(ctx, target, opts, l, r, key) {
-        if (is(unwrap(l), Library.ActMethod)) {
-            return { solved: true, result: await unwrap(l).method(ctx, l.parent ?? target, opts, ...r) };
+        if (isActFunction(unwrap(l))) {
+            return { solved: true, result: await unwrap(l)(ctx, l.parent ?? target, opts, ...r) };
         } else if (is(unwrap(l), Function)) {
             const solvedR = await ctx.solveAll(r, target, opts);
-            const args = solvedR.map(arg => is(unwrap(arg), Library.ActMethod)
-                ? (...a) => unwrap(arg).method(ctx, target, opts, ...a)
+            const args = solvedR.map(arg => isActFunction(unwrap(arg))
+                ? (...a) => unwrap(arg)(ctx, target, opts, ...a)
                 : unwrap(arg)
             );
             return { solved: true, result: await unwrap(l).call(l.parent ?? target, ...args) };
@@ -1445,14 +1571,14 @@
         async perform(ctx, target, opts) {
             let { l, r } = await this.prepare(ctx, target, opts);
             l = l ?? target ?? ctx.target;
-            if (is(unwrap(r), Element)) r = unwrap(r).innerHTML;
 
             if (is(unwrap(l), Element)) {
+                if (is(unwrap(r), Element)) r = unwrap(r).innerHTML;
                 return unwrap(l).innerHTML = r?.toString() ?? '';
             } else if (is(unwrap(l), NodeList)) {
                 return unwrap(l)[0].innerHTML = r?.toString() ?? '';
             } else if (Array.isArray(unwrap(l))) {
-                return unwrap(l).append(unwrap(r));
+                return unwrap(l).push(unwrap(r));
             }
 
             throw new ActError(`Cannot insert into target of type '${typeof unwrap(l)}'. Expected Element, NodeList, or Array.`);
@@ -1560,7 +1686,7 @@
                 if (is(this.r, Scope)) {
                     const scopeData = ctx.scopeData(this.r);
                     scopeData.exception = e;
-                    scopeData.exception.message = e.actException.message;
+                    scopeData.exception.message = (e.actException ?? e).message;
                 }
 
                 return await ctx.solve(this.r, target, opts);
@@ -1714,7 +1840,7 @@
             ';': 'sync',
             '&': 'async',
             '?': 'condition',
-            'else?': 'branch',
+            '~': 'branch',
             '>>': 'fwd',
         };
 
@@ -1723,7 +1849,7 @@
             ['string', /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/],
             ['url', /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{2,256}\.[a-z]{2,63}\b[-a-zA-Z0-9@:%_+.~#?&\/=]*/],
             ['comment', /\/\*[\s\S]*?\*\/|\/\/.*/],
-            ['insert', /(?:^|\s+)<<\s+/],
+            ['insert', /(?:^|\s+)?<<\s*/],
             ['operator', RegExp(Object.keys(this.OPERATORS).map(r => '\\s+' + regexEscape(r) + '\\s+').join('|'))],
             ['space', /\s+/],
             ['lparen', /\(/],
@@ -1991,6 +2117,7 @@
 
         parseExpression(scope, skip = []) {
             let l;
+            this.lexer.fwd();
 
             if (this.lexer.tokenIsValue()) {
                 l = this.parseValue(scope);
@@ -2179,7 +2306,7 @@
 
             if (this.lexer.nextIf('colon') && this.lexer.fwd().tokenIs('rbrace')) { 
                 return new ActObject(scope, this.source, { value: new Map }); 
-            } else if (this.lexer.fwd().nextIf('rbrace')) { 
+            } else if (this.lexer.fwd().tokenIs('rbrace')) { 
                 return new ActArray(scope, this.source, { value: [] }); 
             }
 
@@ -2400,7 +2527,7 @@
                 if (codeLines.length - (e.token.line) > 1) logArgs.push(codeLines[e.token.line], '\n');
 
                 console.error(...logArgs);
-                throw e;
+                this.scope = null;
             }
         }
     }
@@ -2419,6 +2546,8 @@
         INTERSECT_EVENTS: {
             inview: 'actinview',
             offview: 'actoffview',
+            actinview: 'actinview',
+            actoffview: 'actoffview',
         },
 
         from(element, create = false) {
@@ -2428,16 +2557,18 @@
         },
 
         eventName(name) {
-            if (Object.keys(Binder.INTERSECT_EVENTS).includes(name)) { return Binder.INTERSECT_EVENTS[name]; }
-
+            if (Object.keys(Binder.INTERSECT_EVENTS).includes(name)) return Binder.INTERSECT_EVENTS[name];
             return name;
         },
 
         bind(element) {
-            if (is(element, HTMLScriptElement) && element.attributes.type?.value == 'text/act') { return this.bindScript(element); }
+            if (is(element, HTMLScriptElement) && element.attributes.type?.value == 'text/act') { 
+                return this.bindScript(element); 
+            }
 
             const binding = this.from(element, true);
             this.bindAttributes(element, binding);
+            element.dispatchEvent(new CustomEvent('actbind', { bubbles: true, detail: { element, binding } }));
         },
 
         bindScript(element) {
@@ -2450,7 +2581,7 @@
                         element.src, { method: 'GET', headers: { 'Content-Type': 'text/plain' } }
                     ).then(response => response.text());
                     const source = new Source(element.attributes.src, 'externalScript', code);
-                    if (Act.config.start) target.dispatchEvent(new Event('actscriptloaded', { detail: { element } }));
+                    if (Act.config.start) target.dispatchEvent(new CustomEvent('actscriptloaded', { bubbles: true, detail: { element, target, binding } }));
                     binding.addEvent('act', source);
                 })();
             }
@@ -2486,13 +2617,21 @@
         bindEvents(binding, source) {
             source.attr.name.replace('act@', '').split(',').forEach(evt => {
                 const opts = {};
-                this.EVENT_OPTIONS.forEach(o => { if (evt.includes(':' + o)) { opts[o] = true; evt = evt.replace(':' + o, ''); } });
+                this.EVENT_OPTIONS.forEach(eo => { 
+                    if (evt.includes(':' + eo)) { 
+                        opts[eo] = true; 
+                        evt = evt.replace(':' + eo, ''); 
+                    } 
+                });
 
                 let match, alias = null;
-                if (match = evt.match(/\[(.*?)\](.*)/)) { alias = match[1]; evt = match[2]; }
+                if (match = evt.match(/^([^\[]+)\[([^\]]+)\]$/)) {
+                    alias = match[1]; 
+                    evt = match[2];
+                }
 
                 const [name, ...mods] = evt.split('.');
-                if (mods.length) opts.modifiers = mods;
+                if (mods.length) opts.modifiers = mods.map(m => m.toLowerCase());
 
                 binding.addEvent(name, source, opts, null, alias);
             });
@@ -2506,10 +2645,17 @@
                 './/script[@type = "text/act"] | .//*[@act] | .//*[@*[starts-with(name(), "act@")]]',
             ).evaluate(root, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
+            const bindedNodes = [];
+
             for (let i = 0; i < xpath.snapshotLength; i++) {
                 const node = xpath.snapshotItem(i);
-                if (!this.from(node) || force) this.bind(node);
+                if (!this.from(node) || force) {
+                    this.bind(node);
+                    bindedNodes.push(node);
+                }
             }
+
+            return bindedNodes;
         }
     };
 
@@ -2525,31 +2671,53 @@
             Object.defineProperty(element, Binder.PROP, { value: this, writable: true, configurable: true });
         }
 
-        #addIntersectObserver(eventName, options) {
-            const observerOptions = {}, element = this.element;
+        #addIntersectObserver(eventName, options, eventManager = null) {
+            const observerOptions = {}, element = this.element, matchingSelector = options.matchingSelector;
 
             if (options.threshold) observerOptions.threshold = options.threshold;
             if (is(options.root, Element)) observerOptions.root = options.root;
-            if (options.rootMargin !== undefined) observerOptions.rootMargin = options.rootMargin.toString();
+            observerOptions.rootMargin = (options?.rootMargin?.toString() || options?.root_margin?.toString());
 
-            const observer = new IntersectionObserver(function (entries) {
-                for (const entry of entries) {
-                    if (entry.isIntersecting === (eventName == Binder.INTERSECT_EVENTS.inview)) {
-                        if (options.once) this.unobserve(element);
-                        element.dispatchEvent(new Event(eventName, { detail: { entry } }));
-                        break;
-                    }
+            const observeElements = matchingSelector ? Array.from(element.querySelectorAll(matchingSelector)) : [element];
+            const intersectionObserver = new IntersectionObserver(function (entries) {
+                for (const entry of entries) if (entry.isIntersecting === (eventName == Binder.INTERSECT_EVENTS.inview)) {
+                    if (options.once) this.disconnect();
+                    const event = new CustomEvent(eventName, { detail: { entry, matchedElement: entry.target } });
+                    element.dispatchEvent(event);
+                    if (matchingSelector && eventManager) eventManager.run(entry.target, event);
+                    if (options.once) break;
                 }
             }, observerOptions);
 
-            observer.observe(element);
+            for (const el of observeElements) intersectionObserver.observe(el);
+
+            let mutationObserver = null;
+            if (matchingSelector) {
+                mutationObserver = new MutationObserver((mutations) => {
+                    for (const mutation of mutations) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                            if (node.matches(matchingSelector)) intersectionObserver.observe(node);
+                            if (node.querySelectorAll) for (const el of node.querySelectorAll(matchingSelector)) intersectionObserver.observe(el);
+                        }
+                    }
+                });
+                mutationObserver.observe(element, { childList: true, subtree: true });
+            }
+
+            return { intersectionObserver, mutationObserver };
         }
 
         addEvent(eventName, source, options = {}, eventManager = null, eventAlias = null) {
             if (eventAlias === null) eventAlias = eventName;
             if (Object.keys(Binder.INTERSECT_EVENTS).includes(eventName)) {
                 eventName = Binder.INTERSECT_EVENTS[eventName];
-                this.#addIntersectObserver(eventName, options);
+                if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
+                eventManager.observer = this.#addIntersectObserver(eventName, options, eventManager);
+                if (options.matchingSelector) {
+                    this.events[eventAlias] = eventManager;
+                    return;
+                }
             }
 
             if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
@@ -2571,7 +2739,6 @@
 
         lookupBlock(name) {
             let binding = this;
-
             while (binding) {
                 if (Object.hasOwn(binding.blocks, name)) return { block: binding.blocks[name], binding };
                 binding = binding.parent();
@@ -2606,7 +2773,7 @@
             this.contexts = new Set;
 
             this.listener = (ev) => {
-                const mods = this.options.modifiers?.map(m => m.toLowerCase());
+                const mods = this.options.modifiers;
                 if (mods) {
                     if (['shift', 'ctrl', 'alt', 'meta'].some(k => (mods.includes(k) || (k === 'ctrl' && mods.includes('control'))) && !ev[k + 'Key'])) return;
                     const keys = mods.filter(m => !['shift', 'ctrl', 'control', 'alt', 'meta'].includes(m));
@@ -2622,6 +2789,11 @@
         async run(target, event = null) {
             if (this.lock) return;
             const context = new Context(target, this.binding, event, this, this.source);
+
+            target.dispatchEvent(new CustomEvent('actstart', {
+                bubbles: true,
+                detail: { event, source: this.source, eventManager: this },
+            }));
 
             try {
                 this.attach(context);
@@ -2691,8 +2863,17 @@
                     
                     console.groupEnd();
                 }
+
+                target.dispatchEvent(new CustomEvent('acterror', {
+                    bubbles: true,
+                    detail: { error: e, event, source: this.source, eventManager: this },
+                }));
             } finally {
                 this.detach(context);
+                target.dispatchEvent(new CustomEvent('actend', {
+                    bubbles: true,
+                    detail: { event, source: this.source, eventManager: this },
+                }));
             }
         }
 
@@ -2762,7 +2943,7 @@
     }
 
     const Act = global.Act = {
-        get version() { return '0.1.0'; },
+        get version() { return '0.2.0'; },
 
         config: {
             convertToCamelCase: true,
@@ -2778,7 +2959,13 @@
         configure() {
             const meta = document.querySelectorAll('meta[name="act-config"]');
             const conf = {};
-            for (const m of meta) { const [k, v] = m.content.split(':'); conf[k.trim()] = JSON.parse(v.trim()); }
+            for (const m of meta) {
+                const i = m.content.indexOf(':');
+                if (i === -1) continue;
+                const k = m.content.substring(0, i).trim();
+                const v = m.content.substring(i + 1).trim();
+                conf[k] = JSON.parse(v);
+            }
             Object.assign(this.config, conf, window.__actConfig || {});
             if (this.config.debugLexer) Lexer.debug = true;
             if (this.config.debugParser) Parser.debug = true;
@@ -2787,12 +2974,13 @@
         start() {
             if (this.config.startTime) console.time('act start');
             new Binding(window);
-            this.init(document.body, true);
+            const bindedNodes = this.init(document.body, true);
             if (this.config.startTime) console.timeEnd('act start');
+            document.body.dispatchEvent(new CustomEvent('actready', { bubbles: true, detail: { bindedNodes } }));
         },
 
         init(root, bindRoot, force) {
-            Binder.scan(root, bindRoot, force);
+            return Binder.scan(root, bindRoot, force);
         },
 
         run(target, code) {
