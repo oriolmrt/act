@@ -1455,10 +1455,13 @@
             const fn = Library.get(key, target);
             if (fn !== undefined) return { solved: true, result: await Library.exec(fn, r, target, ctx, opts) };
 
-            const solvedR = await ctx.solveAll(r, target, opts);
-            if (is(target[key], Function)) return { solved: true, result: await target[key](...unwrapAll(solvedR)) };
-            if (is(unwrap(target)[key], Function)) return { solved: true, result: await unwrap(target)[key](...unwrapAll(solvedR)) };
-            if (is(window[key], Function)) return { solved: true, result: await window[key](...unwrapAll(solvedR)) };
+            const host = [target, unwrap(target), window].find(obj => is(obj?.[key], Function));
+            if (host !== undefined) {
+                const solvedR = await ctx.solveAll(r, target, opts);
+                return { solved: true, result: await host[key](...unwrapAll(solvedR)) };
+            }
+        } else if (is(l, SelectorResult) && unwrap(l).length > 0) {
+            return { solved: true, result: unwrap(l)[0] };
         }
 
         return { solved: false, result: null };
@@ -1523,21 +1526,23 @@
 
             for (let key of r) {
                 key = await ctx.solve(key, target, opts);
-                if (is(unwrap(l), Element)) {
+                const lResolved = is(unwrap(l), SelectorResult) ? unwrap(l).value : unwrap(l);
+                if (is(lResolved, Element)) {
                     if (is(from(key), Attribute, CSSProperty)) {
-                        l = await from(key).solve(ctx, unwrap(l), opts);
+                        l = await from(key).solve(ctx, lResolved, opts);
                         continue;
                     } else if (is(from(key), Variable)) {
                         l = new Result(
-                            Binder.from(unwrap(l)).data[from(key).value],
+                            Binder.from(lResolved).data[from(key).value],
                             this,
-                            { parent: Binder.from(unwrap(l)).data, key: from(key).value },
+                            { parent: Binder.from(lResolved).data, key: from(key).value },
                         );
                         continue;
                     }
                 }
 
                 l = unwrap(l);
+                if (is(l, SelectorResult)) l = l.value;
                 const keyValue = unwrap(key);
                 if (l === null || l === undefined) throw new ActError(`Cannot resolve member '${keyValue}' of ${l}.`);
                 const libFn = Library.get(keyValue, l);

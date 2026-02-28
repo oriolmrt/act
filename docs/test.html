@@ -2195,6 +2195,174 @@
                     <div class="t193-child"></div>
                     <div class="t193-child"></div>
                 </div>
+
+                <!-- Fixture elements for selector template tests -->
+                <div id="sel-tmpl-fixture" style="display:none">
+                    <span class="sel-tmpl-item" id="sel-tmpl-first">first</span>
+                    <span class="sel-tmpl-item" id="sel-tmpl-second">second</span>
+                    <div class="sel-tmpl-parent">
+                        <em class="sel-tmpl-child" id="sel-tmpl-child-a">child-a</em>
+                        <em class="sel-tmpl-child" id="sel-tmpl-child-b">child-b</em>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-basic">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-basic</code> {selector} returns a collection</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $els: {#sel-tmpl-fixture .sel-tmpl-item};
+                            @r: $els.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-id">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-id</code> {#id} selects element by id</div>
+                    <div id="sel-tmpl-id-target" data-target data-e="sel-tmpl-first">
+                        <script type="text/act" act>
+                            $el: {#sel-tmpl-first}!;
+                            @r: $el.id;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-interpolation">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-interpolation</code> {#{$id}} interpolated selector</div>
+                    <div data-target data-e="sel-tmpl-second">
+                        <script type="text/act" act>
+                            $id: 'sel-tmpl-second';
+                            $el: {#{$id}}!;
+                            @r: $el.id;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-class-interpolation">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-class-interpolation</code> {.{$cls}} class interpolation</div>
+                    <div data-target data-e="2">
+                        <script type="text/act" act>
+                            $cls: 'sel-tmpl-item';
+                            $els: {.{$cls}};
+                            @r: $els.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-child-prefix">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-child-prefix</code> {&gt; child} selects inside current element</div>
+                    <div data-target data-e="2" act>
+                        <span class="sel-child-a"></span>
+                        <span class="sel-child-a"></span>
+                        <script type="text/act" act>
+                            $els: {> .sel-child-a};
+                            @r: $els.length;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-closest-prefix">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-closest-prefix</code> {&lt; ancestor} finds closest ancestor</div>
+                    <div class="sel-tmpl-ancestor-wrap">
+                        <div data-target data-e="sel-tmpl-ancestor-wrap">
+                            <script type="text/act" act>
+                                $anc: {< .sel-tmpl-ancestor-wrap};
+                                @r: $anc.class_name;
+                            </script>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hidden fixture elements used by the bang (!) tests below -->
+                <div id="bang-fixture" style="display:none">
+                    <span class="bang-item" id="bang-item-first">first</span>
+                    <span class="bang-item" id="bang-item-second">second</span>
+                    <p class="bang-para">para-one</p>
+                    <p class="bang-para">para-two</p>
+                </div>
+
+                <div class="test" id="class-bang-returns-element">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>class-bang-returns-element</code> .class! returns first element (not NodeList)</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $el: .bang-item!;
+                            @r: $el.node_type;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="class-bang-first-id">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>class-bang-first-id</code> .class! returns the FIRST matching element</div>
+                    <div data-target data-e="bang-item-first">
+                        <script type="text/act" act>
+                            $el: .bang-item!;
+                            @r: $el.id;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="tag-bang-returns-element">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>tag-bang-returns-element</code> &lt;tag&gt;! returns a single element (not NodeList)</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $el: <span>!;
+                            @r: $el.node_type;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-bang-returns-element">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-bang-returns-element</code> {selector}! returns a single element</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $el: {.bang-item}!;
+                            @r: $el.node_type;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-bang-first">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-bang-first</code> {selector}! returns the FIRST matching element</div>
+                    <div data-target data-e="bang-item-first">
+                        <script type="text/act" act>
+                            $el: {.bang-item}!;
+                            @r: $el.id;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="selector-template-child-bang">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>selector-template-child-bang</code> {selector}! returns first match (by id)</div>
+                    <div data-target data-e="bang-item-first">
+                        <script type="text/act" act>
+                            $el: {#bang-fixture .bang-item}!;
+                            @r: $el.id;
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="class-bang-vs-no-bang">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>class-bang-vs-no-bang</code> .class! returns a single Element (nodeType 1)</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $first: .bang-para!;
+                            @r: $first.node_type;
+                        </script>
+                    </div>
+                </div>
+
             </div>
         </details>
 
@@ -2824,6 +2992,36 @@
 
             </div>
         </details>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- ACT EXPRESSION - REGRESSION -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <details class="test-group" open>
+            <summary class="group">ActExpression - Regression
+                <span class="group-stats">
+                    <span class="badge pass">✓ <span class="g-pass">0</span></span>
+                    <span class="badge fail">✗ <span class="g-fail">0</span></span>
+                    <span class="badge total"><span class="g-total">0</span></span>
+                </span>
+            </summary>
+            <div class="group-tests">
+
+                <div class="test" id="act-expr-no-double-eval">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>act-expr-no-double-eval</code> Word setter evaluates RHS once</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            local $eval_count: 0;
+                            inner_text: `{(local $eval_count += 1; 'test')}`;
+                            @r: $eval_count;
+                        </script>
+                    </div>
+                </div>
+
+            </div>
+        </details>
+
 
         <script>
             function filter(mode) {

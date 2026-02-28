@@ -457,14 +457,14 @@ log: `Sum: {1 + 2}`;            // Interpolate expressions
 | **Null** | Represents no value. | `null` |
 || **DOM REFERENCES** ||
 | **Id** | An HTML element ID. Prefixed by `#`. Returns the element with that ID. | `#some-id`, `#header` |
-| **Class** | An HTML element class. Prefixed by `.`. Returns all elements with that class. | `.some-class`, `.button` |
-| **Tag** | An HTML tag. Wrapped in `<>`. Returns all elements with that tag. | `<div>`, `<button>` |
+| **Class** | An HTML element class. Prefixed by `.`. Returns all elements with that class. Append `!` to select only the **first** matching element directly. | `.some-class`, `.button`, `.button!` |
+| **Tag** | An HTML tag. Wrapped in `<>`. Returns all elements with that tag. Append `!` to select only the **first** matching element directly. | `<div>`, `<button>`, `<div>!` |
 || **COLLECTIONS** ||
 | **Array** | A list of values separated by spaces or commas, wrapped in `[]`. | `[1 2 3]`, `["a", "b", "c"]` |
 | **Object** | Key-value pairs separated by colons, wrapped in `[]`. Keys and values can be separated by spaces or commas. Use `[:]` as an empty object. | `[key1: value1 key2: value2]`, `[name: 'John', age: 30]` |
 || **TEMPLATES** ||
 | **String Template** | A string with interpolations wrapped in backticks. Interpolations use `{}` and can contain full sentences. | `` `Hello {$name}!` ``, `` `Result: {2 + 3}` `` |
-| **Selector Template** | A CSS query selector wrapped in `{}`. Returns matching elements. Supports interpolations and [prefixes](#selector-template-prefixes). | `{#some-div}`, `{p > .class}`, `{#{$id}}` |
+| **Selector Template** | A CSS query selector wrapped in `{}`. Returns matching elements. Supports interpolations and [prefixes](#selector-template-prefixes). Append `!` to select only the **first** matching element directly. | `{#some-div}`, `{p > .class}`, `{#{$id}}`, `{> a.active}!` |
 || **EVALUABLES** ||
 | **Scope** | A collection of sentences wrapped in `()` or `do ... end`. Can hold values, expressions, or multiple sentences. | `(2 + 3)`, `do wait: 1s; log: 'Done' end` |
 | **Function** | An anonymous function defined with `->`. Can have arguments. Returns the value of the last sentence or using `return`. | `->( log: 'Hi' )`, `-> $x $y ($x + $y)` |
@@ -496,6 +496,14 @@ Selector templates are not just a convenient way to call `document.querySelector
 | --- | --- | --- |
 | `< ...` | Returns the [closest](https://developer.mozilla.org/en-US/docs/Web/API/Element/closest) element that matches the CSS query | `{< div.button}`, `{< p}` |
 | `> ...` | Returns the elements that match the CSS query inside the current element. Can be used with selectors. | `{> p > span.highlighted}`, `{> a}` |
+
+> [!TIP]
+> Append `!` after a selector template (or any DOM Reference like `.class` or `<tag>`) to select the **first** matching element directly, instead of returning a NodeList. This is equivalent to using `querySelector` instead of `querySelectorAll`.
+> ```act
+> {> a.active}!     // first matching <a class="active"> inside the current element
+> .button!          // first element with class 'button'
+> <li>!            // first <li> element on the page
+> ```
 
 ### Data Scopes
 
