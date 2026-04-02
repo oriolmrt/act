@@ -60,7 +60,7 @@
             "patterns": [
                 {
                     "contentName": "source.act",
-                    "begin": "(?i)\\b(act(?:@[A-Za-z0-9_:-]+)?|(?:act-)[A-Za-z0-9_-]+)\\s*(=)\\s*([\"'])",
+                    "begin": "(?i)\\b(act(?:@[A-Za-z0-9_:,.-]+)?|(?:act-)[A-Za-z0-9_-]+)\\s*(=)\\s*([\"'])",
                     "beginCaptures": {
                         "1": {
                             "name": "entity.other.attribute-name.html"

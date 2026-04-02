@@ -3,6 +3,10 @@
 > ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 > [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+> [!CAUTION]
+> **This version is in active development.** Breaking changes may occur without notice.
+
+
 ```html
 <script src="act.js"></script>
 <button act@click="alert: `Just act, don't react!`">Click me!</button>
@@ -52,7 +56,6 @@
 - [Advanced](#advanced)
     - [Configuration](#configuration)
     - [Extending the library methods](#extending-the-library-methods)
-    - [Lazy evaluation](#lazy-evaluation)
     - [Extending keyword operations](#extending-keyword-operations)
     - [Results and Solving](#results-and-solving)
     - [htmx Integration](#htmx-integration-act-htmxjs)
@@ -203,7 +206,7 @@ Simply include the `act.js` file in your HTML. No build steps required. You can 
 
 
 <h1>AI Dinner suggester 2000</h1>
-<ul id="dinner-list" act@click:target="confirm: `Remove {:inner_text}?` ? collapse!">
+<ul id="dinner-list" act@click:target="confirm: `Remove {:inner_text}?` ? remove!">
     <li>Pizza</li>
     <li>Pasta</li>
     <li>Salad</li>
@@ -997,16 +1000,17 @@ It accepts the following types:
 | `number` | Casts the left operand to a number, if it cannot be cast to a number it returns 0. | `'1.2' as number`, `'not a number' as number  // returns 0` |
 | `float` | Casts the left operand to a float. | `'1.2' as float` |
 | `int` | Casts the left operand to an integer. | `'23' as int` |
+| `integer` | Alias for `int`. | `'23' as integer` |
 | `boolean` | Casts the left operand to a boolean. | `'false' as boolean` |
 | `id` | Casts the left operand to an id. | `'#some-id' as id` or `'some-id' as id` |
 | `class` | Casts the left operand to a class. | `'.some-class' as class` or `'some-class' as class` |
 | `attribute` | Casts the left operand to an attribute of the target. | `'@some-attribute' as attribute` or `'some-attribute' as attribute` |
-| `tag` | Casts the left operand to a tag. | `'<div>' as tag` or `'div' as tag` |
 | `css_property` | Casts the left operand to a CSS property of the target. | `'*some-property' as css_property` or `'some-property' as css_property` |
 | `dimension` | Casts the left operand to a dimension. | `'1.2rem' as dimension` |
 | `variable` | Casts the left operand to a variable name. | `'foo' + 'bar' as variable` |
-| `property` | Casts the left operand to a property name. | `'foo' + 'bar' as property` |
-| `url` | Casts the left operand to a URL. | `'https://grugbrain.dev/' as url` |
+| `json` | Serializes the left operand to a JSON string using `JSON.stringify`. | `$obj as json` |
+| `fragment` | Parses the left operand as HTML and returns a `DocumentFragment`. | `'<p>Hello</p>' as fragment` |
+| `selector` | Casts the left operand to a selector template. | `'.my-class' as selector` |
 
 #### `rescue` operator
 
@@ -1660,6 +1664,67 @@ let local $state;      // Declares/nullifies $state at the element scope.
 let scoped $temp;      // Declares/nullifies $temp at the current scope.
 ```
 
+#### `debounce`
+
+Executes a scope or expression with **debounce**, specifying the time as the first argument.
+
+Arguments:
+`(duration: dimension) (scope: Scope)`
+
+Examples:
+
+```act
+debounce 500ms ( log: 'Debounced' );
+```
+
+#### `lock`
+
+Locks the current scope or a specific event, preventing further evaluations until it is unlocked.
+
+Arguments:
+
+- No arguments: Locks the current event scope
+- `(boolean)`: Sets lock state for current event scope
+- `(event name)`: Locks a specific event on the target element
+- `(event name, boolean)`: Sets lock state for specific event
+
+Examples:
+
+```act
+lock;
+lock click;
+lock scroll false;
+```
+
+#### `unlock`
+
+Unlocks the current scope or a specific event, allowing further evaluations.
+
+Arguments:
+`[event: string]`
+
+Examples:
+
+```act
+unlock;
+unlock click;
+```
+
+#### `is_locked`
+
+Checks if the event execution is locked.
+
+Arguments:
+`[event: string]`
+
+Returns `true` if the event is locked, `false` otherwise.
+
+Examples:
+
+```act
+is_locked? log: 'Locked';
+```
+
 ### Signals
 
 Act has a few statements called signals that can be used to control the execution flow of a scope.
@@ -1762,67 +1827,6 @@ $validate: -> $name (
     // ...
     return 'John not found';
 );
-```
-
-#### `debounce`
-
-Executes a scope or expression with **debounce**, specifying the time as the first argument.
-
-Arguments:
-`(duration: dimension) (scope: Scope)`
-
-Examples:
-
-```act
-debounce 500ms ( log: 'Debounced' );
-```
-
-#### `lock`
-
-Locks the current scope or a specific event, preventing further evaluations until it is unlocked.
-
-Arguments:
-
-- No arguments: Locks the current event scope
-- `(boolean)`: Sets lock state for current event scope
-- `(event name)`: Locks a specific event on the target element
-- `(event name, boolean)`: Sets lock state for specific event
-
-Examples:
-
-```act
-lock;
-lock click;
-lock scroll false;
-```
-
-#### `unlock`
-
-Unlocks the current scope or a specific event, allowing further evaluations.
-
-Arguments:
-`[event: string]`
-
-Examples:
-
-```act
-unlock;
-unlock click;
-```
-
-#### `is_locked`
-
-Checks if the event execution is locked.
-
-Arguments:
-`[event: string]`
-
-Returns `true` if the event is locked, `false` otherwise.
-
-Examples:
-
-```act
-is_locked? log: 'Locked';
 ```
 
 ## Act Library
@@ -2054,20 +2058,6 @@ Examples:
 
 #some-element add: @data-enabled;
 // Adds the 'data-enabled' attribute with an empty value
-```
-
-#### `collapse`
-
-Animates the element collapsing (height to 0) and then removes it from the DOM.
-
-Arguments:
-`[time dimension] [timing function Word]`
-
-Examples:
-
-```act
-#some-element collapse!;
-#some-element collapse!: 500ms ease-out;
 ```
 
 #### `is_in_view`
@@ -2886,8 +2876,8 @@ The following options can be configured in Act:
 | `convertToCamelCase` | `boolean` | `true` | Automatically convert `snake_case` properties and method names to `camelCase`. |
 | `start` | `boolean` | `true` | Automatically start Act, parsing the code in the elements, binding events and triggering the `act` event when the DOM is ready. |
 | `debug` | `boolean` | `false` | Enable debug mode (logs more info). |
-| `debugLexer` | `boolean` | `false` | Enable lexer debug logging. |
-| `debugParser` | `boolean` | `false` | Enable parser debug logging. |
+| `lexerDebug` | `boolean` | `false` | Enable lexer debug logging. |
+| `parserDebug` | `boolean` | `false` | Enable parser debug logging. |
 | `startTime` | `boolean` | `true` | Log timing information for `Act.start()` to the console. |
 | `sanitize` | `boolean` | `false` | Enable HTML sanitization for content insertion operations. |
 | `sanitizer` | `function\|null` | `null` | Custom sanitizer function (e.g., `DOMPurify.sanitize`). Required when `sanitize` is `true`. |

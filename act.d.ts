@@ -15,9 +15,9 @@ declare namespace Act {
     /** Enable global debug mode */
     debug: boolean;
     /** Enable Lexer-specific debug output */
-    debugLexer?: boolean;
+    lexerDebug?: boolean;
     /** Enable Parser-specific debug output */
-    debugParser?: boolean;
+    parserDebug?: boolean;
     /** Log timing information for Act.start() */
     startTime?: boolean;
     /** Enable HTML sanitization for insertContent operations */
@@ -393,8 +393,9 @@ declare namespace Act {
      * @param root - Root element to scan
      * @param bindRoot - Whether to bind the root element
      * @param force - Force re-binding
+     * @returns Array of newly bound elements
      */
-    scan(root: Element, bindRoot?: boolean, force?: boolean): void;
+    scan(root: Element, bindRoot?: boolean, force?: boolean): Element[];
   }
 
   // ============================================================================
@@ -402,7 +403,6 @@ declare namespace Act {
   // ============================================================================
 
   class Lexer {
-    static debug: boolean;
     static Token: new (type: string, value: string, index: number, line: number, column: number) => Token;
     static VALUES: Record<string, string>;
     static PREFIXES: string[];
@@ -433,7 +433,6 @@ declare namespace Act {
   }
 
   class Parser {
-    static debug: boolean;
     constructor(source: Source);
     parse(): Scope;
     isKeyword(word: any): boolean;
@@ -539,14 +538,20 @@ declare namespace Act {
     spawn(): Context;
   }
 
+  /** A block stored inline via the `def` keyword (not a Source) */
+  interface DefBlock {
+    args: (string | [string])[];
+    scope: Solvable;
+  }
+
   interface Binding {
     readonly element: Element;
     readonly data: Record<string, any>;
     readonly events: Record<string, EventManager>;
-    readonly blocks: Record<string, Source>;
+    readonly blocks: Record<string, Source | DefBlock>;
     parent(): Binding | undefined;
-    getBlock(name: string): Source | undefined;
-    lookupBlock(name: string): { block: Source; binding: Binding } | undefined;
+    getBlock(name: string): Source | DefBlock | undefined;
+    lookupBlock(name: string): { block: Source | DefBlock; binding: Binding } | undefined;
     lookupData(key: string): Result | undefined;
     addEvent(eventName: string, source: Source, options?: Record<string, any>, eventManager?: EventManager | null, eventAlias?: string | null): void;
   }

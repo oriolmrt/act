@@ -910,7 +910,7 @@
 
     class SelectorResult extends ComplexResult {
         get value() {
-            if (this.mode === 'closest') return this.parent.closest(this._value);
+            if (this.mode === 'closest') return this.parent.closest(this._value) || [];
             return this.parent.querySelectorAll(this._value);
         }
 
@@ -1200,14 +1200,11 @@
             if (selector.startsWith('> ')) {
                 selectorTarget = target;
                 selector = selector.slice(2);
-                if (selectorTarget.querySelector(selector) === null) return null;
             } else if (selector.startsWith('< ')) {
                 selectorTarget = is(target, Element) ? target : ctx.target;
-                if (selectorTarget.closest(selector.slice(2)) === null) return null;
                 return new SelectorResult(selector.slice(2), this, { parent: selectorTarget, mode: 'closest' });
             }
 
-            if (selectorTarget.querySelector(selector) === null) return null;
             return new SelectorResult(selector, this, { parent: selectorTarget });
         }
     }
@@ -1762,7 +1759,6 @@
     });
 
     class Lexer {
-        static debug = false;
         static Token = class {
             constructor(type, value, index, line, column) {
                 this.type = type;
@@ -1920,7 +1916,7 @@
         hasMoreTokens() { return this.input.length > this.index; }
 
         setTplMode(tplMode) {
-            if (Lexer.debug) console.warn(`Lexer setTplMode: Lexer set to ${tplMode ? 'template' : 'language'} mode.`);
+            if (Act.config.lexerDebug) console.warn(`Lexer setTplMode: Lexer set to ${tplMode ? 'template' : 'language'} mode.`);
             this.tplMode = tplMode;
             this.regex = tplMode ? this.tplRegex : this.langRegex;
             this.regex.lastIndex = this.index;
@@ -2046,8 +2042,6 @@
     }
     
     class Parser {
-        static debug = false;
-
         static VALUES = {
             word: [Word],
             number: [ActNumber, v => parseFloat(v)],
@@ -2095,7 +2089,7 @@
             }
 
             root.tokenEnd = this.lexer.peek();
-            if (Parser.debug) console.warn('Parser.parse() finished\n', root, this.source);
+            if (Act.config.parserDebug) console.warn('Parser.parse() finished\n', root, this.source);
             return root;
         }
 
@@ -2396,6 +2390,7 @@
 
             while (!this.lexer.tokenIs(endToken) && this.lexer.hasMoreTokens()) {
                 if (this.lexer.nextIf('lcurly')) {
+                    this.lexer.setTplMode(false);
                     while (!this.lexer.tplMode && this.lexer.hasMoreTokens()) {
                         const sentence = this.parseSentence(subscope);
                         if (sentence) {
@@ -2407,6 +2402,8 @@
                     }
 
                     this.lexer.next();
+                } else if (!this.lexer.tplMode) {
+                    this.lexer.setTplMode(true);
                 }
 
                 if (this.lexer.tokenIs(endToken, 'lcurly')) {
@@ -2728,7 +2725,7 @@
             if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
             this.events[eventAlias] = eventManager;
             this.element.addEventListener(eventName, eventManager.listener, options);
-            if (eventName === 'act' && Act.config.start) this.element.dispatchEvent(new Event('act', { bubbles: false }));
+            if ((eventName === 'act' || eventName === 'load') && Act.config.start) this.element.dispatchEvent(new Event(eventName, { bubbles: false }));
         }
 
         parent() {
@@ -2954,8 +2951,8 @@
             convertToCamelCase: true,
             start: true,
             debug: false,
-            debugLexer: false,
-            debugParser: false,
+            lexerDebug: false,
+            parserDebug: false,
             startTime: true,
             sanitize: false,
             sanitizer: null,
@@ -2972,8 +2969,6 @@
                 conf[k] = JSON.parse(v);
             }
             Object.assign(this.config, conf, window.__actConfig || {});
-            if (this.config.debugLexer) Lexer.debug = true;
-            if (this.config.debugParser) Parser.debug = true;
         },
 
         start() {
