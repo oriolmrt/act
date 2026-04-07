@@ -353,9 +353,7 @@
                 }
             }
 
-            if (alias) em.alias = alias;
-
-            binding.addEvent(eventName, eventScope.source, options, em);
+            binding.addEvent(eventName, eventScope.source, options, em, alias);
             return true;
         },
 
@@ -372,7 +370,7 @@
                 if (em.observer.mutationObserver) em.observer.mutationObserver.disconnect();
             }
 
-            binding.element.removeEventListener(eventName, em.listener);
+            binding.element.removeEventListener(em.name, em.listener);
             delete binding.events[eventName];
             return true;
         },
@@ -1267,7 +1265,7 @@
     class Scope extends Solvable {
         value = [];
 
-        isRoot() { return this.scope === undefined; }
+        isRoot() { return !is(this.scope, Scope); }
 
         async solve(ctx, target, opts) {
             let result, skipStack = [];
@@ -1590,26 +1588,34 @@
     class IsTypeOperation extends Expression {
         async perform(ctx, target, opts) {
             let { l, r } = await this.prepare(ctx, target, opts);
-            const type = r.toString();
+            const unwrapped = unwrap(l), type = r.toString();
 
-            if (is(unwrap(l), Element)) {
-                if (is(from(r), Tag)) return unwrap(l).tagName.toLowerCase() === from(r).value.toLowerCase();
-                return unwrap(l).tagName.toLowerCase() === type.toLowerCase();
+            if (is(unwrapped, Element)) {
+                if (is(from(r), Tag)) return unwrapped.tagName.toLowerCase() === from(r).value.toLowerCase();
+                return unwrapped.tagName.toLowerCase() === type.toLowerCase();
             }
 
-            if (type === 'float') {
-                return typeof unwrap(l) === 'number' && !Number.isNaN(unwrap(l));
-            } else if (type === 'integer' || type === 'int') {
-                return typeof unwrap(l) === 'number' && Number.isInteger(unwrap(l));
+            switch (type) {
+                case 'float':
+                    return typeof unwrapped === 'number' && !Number.isNaN(unwrapped);
+                case 'integer':
+                case 'int':
+                    return typeof unwrapped === 'number' && Number.isInteger(unwrapped);
+                case 'string':
+                    return typeof unwrapped === 'string';
+                case 'boolean':
+                    return typeof unwrapped === 'boolean';
+                case 'object':
+                    return typeof unwrapped === 'object';
+                case 'array':
+                    return Array.isArray(unwrapped);
             }
 
+            if (unwrapped.constructor?.name === type) return true;
             let className = snakeToCamel(type);
             className = className.charAt(0).toUpperCase() + className.slice(1);
-            const resultFrom = from(through(l));
-            if (resultFrom && resultFrom.constructor?.name === className) return true;
-            const unwrapped = unwrap(l);
-            if (unwrapped != null && unwrapped.constructor?.name === className) return true;
-            return is(unwrap(l), r.value);
+            if (from(through(l)) && from(through(l)).constructor?.name === className) return true;
+            return unwrapped != null && unwrapped.constructor?.name === className;
         }
     }
 
@@ -2822,7 +2828,7 @@
                         '\nElement binding:', initialTrace.context.binding.element,
                     );
 
-                    console.groupCollapsed('Stack trace');
+                    console.group('Stack trace');
                     for (const entry of e.actTrace) {
                         const s = entry.sentence, codeLines = s.code.split('\n'), firstLine = codeLines[0], hasMoreLines = codeLines.length > 1;
                         const beforeError = firstLine.substring(0, expr.tokenStart.index - s.tokenStart.index);
