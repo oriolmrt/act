@@ -2879,181 +2879,319 @@ The following options can be configured in Act:
 | `lexerDebug` | `boolean` | `false` | Enable lexer debug logging. |
 | `parserDebug` | `boolean` | `false` | Enable parser debug logging. |
 | `startTime` | `boolean` | `true` | Log timing information for `Act.start()` to the console. |
-| `sanitize` | `boolean` | `false` | Enable HTML sanitization for content insertion operations. |
-| `sanitizer` | `function\|null` | `null` | Custom sanitizer function (e.g., `DOMPurify.sanitize`). Required when `sanitize` is `true`. |
+| `sanitize` | `boolean` | `false` | Enable HTML sanitization for content insertion operations (`append`, `prepend`, `<<`). When `true`, the `sanitizer` function must be provided. |
+| `sanitizer` | `function\|null` | `null` | Sanitizer function called with `(element, html)` before any HTML string is inserted. Return a sanitized string to replace the original, or `null` to skip insertion entirely. Required when `sanitize` is `true`. |
 
 #### Setting Configuration
 
 You can configure Act in two ways:
 
-1.  **Meta Tags**: Use `<meta name="act-config" content="option: value">` tags in your HTML head.
+1.  **Meta Tags**: Add `<meta name="act-{option}" content="{value}">` tags in your HTML `<head>`. Keys are in kebab-case and values are JSON-parsed.
     ```html
-    <meta name="act-config" content="debug: true">
-    <meta name="act-config" content="convertToCamelCase: false">
+    <meta name="act-debug" content="true">
+    <meta name="act-start" content="false">
+    <meta name="act-convert-to-camel-case" content="false">
     ```
 
-2.  **Global Object**: Set the `__actConfig` global object before loading `act.js`.
-    ```html
-    <script>
-        window.__actConfig = {
-            debug: true,
-            convertToCamelCase: false
-        };
-    </script>
-    <script src="act.js"></script>
+2.  **`Act.extend()`**: Register an extension with an `install` hook. This is the recommended approach for JavaScript-based configuration and extensions.
+    ```js
+    Act.extend({
+        install(Act) {
+            Act.config.debug = true;
+            Act.config.start = false;
+        }
+    });
     ```
 
-### Extending the library methods
+### Extensions
 
-You can **extend** the library by adding your own methods to the `Act.Library` objects.
-Before calling your function, all the **arguments will be solved** so you can use `Act.unwrap` to get the value.
-The act target is bound to `this`.
+Act's extension system is built around `Act.extend()` — a single entry point for registering plugins before (or after) initialization.
+
+#### `Act.extend(plugin)`
+
+Registers a plugin and returns `Act` for chaining.
 
 ```js
-Act.Library.globals.my_method = function(arg1, arg2) {
-    // arg1 and arg2 are already solved, they are Result instances. 
-    // As this Result instances implement the `toString` method, we can use them directly in templates.
-    return `String returned by my method ${arg1} ${arg2}`;
-};
-
-Act.Library.Element.pinkify = function() {
-    this.style.backgroundColor = 'pink';
-    this.style.color = 'black';
-};
+Act.extend(plugin);         // single plugin
+Act.extend(a).extend(b);    // chained
 ```
 
-Then you can use it in your code:
+`plugin` can be:
+
+- **A plain object** with optional lifecycle hooks and a `name`
+- **A function** — treated as the `install` hook
+
+```js
+// Object form
+Act.extend({
+    name: 'my-plugin',   // optional, useful for debugging
+
+    install(Act) {
+        // runs before Act.start()
+    },
+
+    ready(Act) {
+        // runs after Act.start()
+    },
+});
+
+// Function shorthand (treated as install)
+Act.extend(function (Act) {
+    Act.Library.Element.pinkify = function () {
+        this.style.backgroundColor = 'pink';
+    };
+});
+```
+
+#### Hooks
+
+| Hook | When it fires | Typical use |
+| --- | --- | --- |
+| `install(Act)` | Before `Act.start()` | Add library methods, register keywords/prefixes, modify config |
+| `ready(Act)` | After `Act.start()` | Access the initialized DOM, set up integrations |
+
+##### `install(Act)`
+
+The `install` hook is used for anything that needs to be in place before Act scans and binds the page. Because parsing happens inside `start()`, any keywords, prefixes, or library methods you register in `install` will be available to every Act expression on the page.
+
+```js
+Act.extend({
+    install(Act) {
+        // configure
+        // Enable sanitization
+        Act.config.sanitize = true;
+        // sanitizer receives (element, html) — return the clean string, or null to skip insertion
+        Act.config.sanitizer = (element, html) => DOMPurify.sanitize(html);
+
+        // add a library method
+        Act.Library.Element.shine = function () {
+            this.style.boxShadow = '0 0 12px gold';
+        };
+
+        // add a keyword
+        Act.Library.keywords.unless = async function (ctx, target, opts, args) {
+            const [condition, body] = args;
+            if (!(await ctx.asValueOf(condition, target)))
+                return await ctx.solve(body, target, opts);
+        };
+
+        // add a prefix
+        Act.Library.prefixes.maybe = async function (ctx, target, opts, value) {
+            try { return await ctx.asValueOf(value, target); }
+            catch { return undefined; }
+        };
+    },
+});
+```
+
+##### `ready(Act)`
+
+The `ready` hook fires after the initial page scan — equivalent to listening to the `actready` DOM event, but scoped to your plugin.
+
+```js
+Act.extend({
+    ready(Act) {
+        console.log('Act is ready. Extensions:', Act.extensions.length);
+    },
+});
+```
+
+#### Late registration
+
+If `Act.extend()` is called **after** `Act.start()` has already run (e.g. from a dynamically `import()`ed module), both `install` and `ready` fire immediately:
+
+```js
+// Loaded lazily, long after DOMContentLoaded
+const { myPlugin } = await import('./my-plugin.js');
+Act.extend(myPlugin);
+// → install() fires right now
+// → ready() fires right now
+// Any new keywords/methods are available for future Act.init() calls
+```
+
+#### `Act.extensions`
+
+A public array of all registered extensions, in registration order. Useful for inspection and debugging:
+
+```js
+console.log(Act.extensions.map(e => e.name));
+// ['act-ext', 'my-plugin', ...]
+```
+
+---
+
+#### What you can extend
+
+##### Library methods (`Act.Library.globals`, `Act.Library.Element`, etc.)
+
+Library methods are called with **pre-evaluated** (`Result`) arguments and `this` bound to the target. They are the most common extension point.
+
+| Object | Available when target is |
+| --- | --- |
+| `Act.Library.Element` | An DOM `Element` |
+| `Act.Library.globals` | Any target (global scope) |
+| `Act.Library.string` | A `string` |
+| `Act.Library.Array` | An `Array` |
+| `Act.Library.object` | A plain object |
+| `Act.Library.number` | A `number` |
+
+```js
+Act.extend({
+    install(Act) {
+        // Global method — available on any target
+        Act.Library.globals.double_log = function (...args) {
+            const values = Act.unwrapAll(args);
+            console.log(...values);
+            console.log(...values);
+        };
+
+        // Element method — available when target is an Element
+        Act.Library.Element.pinkify = function () {
+            this.style.backgroundColor = 'pink';
+            this.style.color = 'black';
+        };
+
+        // String method — available when target is a string
+        Act.Library.string.shout = function () {
+            return this.toUpperCase() + '!!!';
+        };
+    },
+});
+```
 
 ```html
-<button act@click="log: my_method: 1 2; pinkify!;">
-    Click me!
-</button>
+<button act@click="double_log: 'hi'; pinkify!;">Click me!</button>
+<p act@click="log: 'hello'.shout!;">Hover me!</p>
 ```
 
-### Extending keyword operations
+##### Keyword operations (`Act.Library.keywords`)
 
-> [!WARNING]
-> Your custom keyword operation methods **must** be present in Act.Library.keywords **before** the JavaScript `Act.start()` method is called on your page (by default on the `DOMContentLoaded` event).
-> The parser needs to know about them before it can parse those operations properly.
+Keywords are words that the Parser recognises as special expression heads. They receive **unevaluated** (solvable) arguments, giving you full control over evaluation order and laziness.
 
-> [!TIP]
-> You need to disable the `start` configuration option in the [configuration](#configuration) to prevent Act from automatically starting. Add your keyword operations to `Act.Library.keywords` and then manually call `Act.start()`.
+All keyword methods are **async** and receive:
 
-You can extend the library by adding your own [keyword operations](#keywords).
-All keyword operation methods are **async functions** that receive the following arguments:
-
-- `this` - is bound to the **KeywordExpression solvable**
-- `ctx` - the execution **context** object with solving methods
-- `target` - the **target** of the operation
-- `opts` - options object
-- `args` - the **unevaluated arguments** of the operation (Act values, not Results nor JavaScript values)
+| Parameter | Description |
+| --- | --- |
+| `ctx` | Execution context, use `ctx.solve()`, `ctx.asValueOf()`, etc. |
+| `target` | The current Act target |
+| `opts` | Options object |
+| `args` | Array of unevaluated solvable arguments |
+| `this` | Bound to the `KeywordExpression` solvable node |
 
 ```js
-Act.Library.keywords.add_cow_variable = async function(ctx, target, opts, args) {
-    ctx.scopeData(this.scope).cow = '🐮';
-    console.log('$cow variable added to this scope!');
-};
+Act.extend({
+    install(Act) {
+        // `unless condition body`  — inverse of `if`
+        Act.Library.keywords.unless = async function (ctx, target, opts, args) {
+            const [condition, body] = args;
+            if (!(await ctx.asValueOf(condition, target)))
+                return await ctx.solve(body, target, opts);
+        };
 
-Act.Library.keywords.wait_more = async function(ctx, target, opts, args) {
-    const {wait, time_to_ms} = Act.Library.globals;
-    if (args[0] === undefined) {
-        return await wait.call(target, '60s');
-    }
-
-    const solvedArg = await ctx.solve(args[0], target, opts);
-
-    if (['ms', 's', 'm', 'h'].includes(solvedArg.unit)) {
-        return await wait.call(target, time_to_ms.call(target, solvedArg.value) * 10);
-    }
-
-    throw new Error('The argument is not a dimension or it has an invalid unit');
-};
-
-Act.Library.globals.double_log = function(...args) {
-    const values = Act.unwrapAll(args);
-    console.log(...values);
-    console.log(...values);
-};
-
-Act.Library.globals.repeat_log = function(times, ...args) {
-    const count = Act.unwrap(times);
-    const values = Act.unwrapAll(args);
-    for (let i = 0; i < count; i++) {
-        console.log(...values);
-    }
-};
+        // `wait_more duration`  — waits 10× longer than `wait`
+        Act.Library.keywords.wait_more = async function (ctx, target, opts, args) {
+            const { wait, time_to_ms } = Act.Library.globals;
+            if (!args[0]) return await wait.call(target, '60s');
+            const solved = await ctx.solve(args[0], target, opts);
+            return await wait.call(target, time_to_ms.call(target, Act.unwrap(solved) * 10));
+        };
+    },
+});
 ```
+
+```html
+<div act@click="unless $disabled (log: 'fired!')"></div>
+```
+
+##### Prefix operations (`Act.Library.prefixes`)
+
+Prefixes are single-word modifiers that wrap the value immediately following them — e.g. `not`, `global`, `first`. They receive the **pre-evaluated** value and return a transformed result.
+
+All prefix methods receive:
+
+| Parameter | Description |
+| --- | --- |
+| `ctx` | Execution context |
+| `target` | The current Act target |
+| `opts` | Options object |
+| `value` | The **pre-evaluated** value the prefix is applied to |
+
+```js
+Act.extend({
+    install(Act) {
+        // `maybe value`  — returns undefined instead of throwing
+        Act.Library.prefixes.maybe = async function (ctx, target, opts, value) {
+            try { return await ctx.asValueOf(value, target); }
+            catch { return undefined; }
+        };
+
+        // `double value`  — multiplies a number by 2
+        Act.Library.prefixes.double = async function (ctx, target, opts, value) {
+            return Act.unwrap(await ctx.asValueOf(value, target)) * 2;
+        };
+    },
+});
+```
+
+```html
+<div act@click="log: maybe $risky-prop; log: double 21;"></div>
+```
+
+##### Reserved words (`Act.Library.words`)
+
+Words are identifier-like values with no arguments — they evaluate to a fixed value when encountered in expressions. Built-in examples: `me`, `true`, `false`, `null`, `document`, `window`.
+
+Word functions receive `(ctx, target)` and return the value.
+
+```js
+Act.extend({
+    install(Act) {
+        // `viewport_width`  — returns window.innerWidth
+        Act.Library.words.viewport_width = () => window.innerWidth;
+
+        // `is_mobile`  — returns a boolean
+        Act.Library.words.is_mobile = () => window.innerWidth < 768;
+    },
+});
+```
+
+```html
+<div act="log: viewport_width; is_mobile? hide!"></div>
+```
+
 
 ### Results and Solving
 
-It is important to understand how arguments are passed to your custom functions, as it differs between **Library methods** and **Keyword operations**.
-
-#### Library Methods vs Keyword Operations
-
-| Feature | Library Methods (`Act.Library.*`) | Keyword Operations (`Act.Library.keywords.*`) |
-| --- | --- | --- |
-| **Arguments** | **Evaluated Results**. Act solves the arguments before calling your function. | **Unevaluated Solvables**. You receive the raw Act values (Variables, Expressions, etc.). |
-| **Execution** | Synchronous (mostly). | Asynchronous. |
-| **Context** | `this` is the target element. | `this` is the KeywordExpression solvable. `ctx` is passed as first argument. |
-
-#### Working with Library Methods
-
-In library methods, arguments are already solved to **Result** instances. You can use `Act.unwrap` to get the raw JavaScript value.
-
-```js
-Act.Library.globals.my_method = function(arg1, arg2) {
-    // arg1 and arg2 are Result instances
-    console.log(arg1); // Result { value: ..., ... }
-    
-    // Unwrap to get the actual value
-    const val1 = Act.unwrap(arg1);
-    const val2 = Act.unwrap(arg2);
-    
-    return `Values: ${val1}, ${val2}`;
-};
-```
-
-#### Working with Keyword Operations
-
-In keyword operations, you receive **unevaluated arguments**. You must use the `ctx` object to solve them.
-
-```js
-Act.Library.keywords.my_keyword = async function(ctx, target, opts, args) {
-    // args is an array of Solvables (Act values)
-    
-    // Solve the first argument
-    const result = await ctx.solve(args[0], target, opts);
-    
-    // Unwrap the result
-    const value = Act.unwrap(result);
-    
-    console.log(value);
-};
-```
-
 #### The `Result` Object
 
-Whether you solve the arguments automatically (Library methods) or manually (Keyword operations), a **Result** object contains metadata about the value.
+When Act evaluates an expression, it wraps the value in a **Result** object that carries metadata alongside the raw value. Both library methods (which receive pre-evaluated arguments), keyword and prefix operations (which solve arguments manually via `ctx.solve()`) deal with Results.
 
-**Result properties:**
+**Properties:**
 
-- `value` - The actual value (automatically unwraps nested Results)
-- `from` - The source Solvable that produced this Result
-- `through` - Traverses the Result chain to find the original source
-- `valueOf()` - Returns the JavaScript primitive value
-- `toString()` - Returns the string representation
+| Property / Method | Description |
+| --- | --- |
+| `value` | The actual value (automatically unwraps nested Results) |
+| `from` | The source Solvable that produced this Result |
+| `through` | Traverses the Result chain to the original source |
+| `valueOf()` | Returns the JavaScript primitive value |
+| `toString()` | Returns the string representation |
+| `settable` | Whether the Result can be set (e.g. a variable reference) |
+| `set(value)` | Assign a new value back to the source |
 
 #### Helper Functions
 
 ```js
-// Unwrap a Result to get its value
-const value = Act.unwrap(resultOrValue);
+// Unwrap a Result to get its raw JS value
+const value = Act.unwrap(result);
 
 // Unwrap all values in an array
 const values = Act.unwrapAll([result1, result2]);
 
-// Solve a value (for Keyword operations)
+// Solve a solvable (use inside keyword and prefix operations)
 const result = await ctx.solve(solvable, target, opts);
+
+// Solve and immediately unwrap
+const value = Act.unwrap(await ctx.solve(solvable, target, opts));
 ```
 
 ### 🐴 htmx Integration (act-htmx.js)
@@ -3147,37 +3285,6 @@ The test suite will automatically execute and display:
 - **Passed** tests (in green)
 - **Failed** tests (in red)
 
-### Test Coverage
-
-The test suite includes automated tests organized into collapsible groups:
-
-- **Value Types**: Strings, numbers, booleans, arrays, objects, dimensions, templates, variables
-- **Operators**: Arithmetic, comparison, logical, assignment, and special operators (`is_in`, `is_a`, etc.)
-- **Cast Operations**: Type conversions using the `as` operator
-- **Keywords**: Control flow (`if`, `else`, `each`, `while`, `repeat`, `break`, etc.)
-- **Element Methods**: DOM manipulation (`hide`, `show`, `fade`, `toggle`, `append`, etc.)
-- **Array/Object Methods**: Data manipulation (`push`, `pop`, `map`, `filter`, `sort`, etc.)
-- **String Methods**: String operations (`replace`, `split`, `trim`, `upper_case`, etc.)
-- **Selectors**: ID, class, tag, and query selectors
-- **Events**: Event handling and modifiers
-- **Transitions & Animations**: CSS transitions and animations via Act
-- **Scopes & Variables**: Global, local, and scoped variable resolution
-- **Functions & Blocks**: Anonymous functions and reusable `def` blocks
-- **Signals**: `stop`, `next`, `skip`, and exception handling
-
-### Test Interface
-
-Each test displays:
-- **Test ID**: Unique identifier in code format
-- **Test Name**: Human-readable description
-- **Status**: ⏳ (running), ✓ (pass), or ✗ (fail)
-- **Error Info**: Details when tests fail
-
-Use the filter buttons to view:
-- **All** tests
-- **Failed** tests only
-- **Passed** tests only
-
 ## TypeScript Support
 
 Act includes a TypeScript definition file (`act.d.ts`) that provides type information for the `Act` global object and the `Act.Library`.
@@ -3209,6 +3316,29 @@ For detailed installation instructions, please refer to [editors/README.md](edit
 `act` is a scripting language that executes in the browser, just like JavaScript itself. Be aware that it does not currently implement strict sandboxing or Content Security Policy (CSP) integrations.
 
 As with any scripting language, you should treat `act` code with the same security considerations as you would raw JavaScript or `innerHTML`. Ensure that you only execute trusted code and avoid injecting unsanitized user input directly into `act` attributes or scripts.
+
+#### HTML Sanitization
+
+Operations that insert raw HTML strings (`append`, `prepend`, `<<`) pass through a sanitization hook when enabled. To opt in, set `sanitize: true` and provide a `sanitizer` function via an extension:
+
+```js
+Act.extend({
+    install(Act) {
+        Act.config.sanitize = true;
+        // Receives (element, html). Return the sanitized string, or null to skip insertion.
+        Act.config.sanitizer = (element, html) => DOMPurify.sanitize(html);
+    },
+});
+```
+
+The `sanitizer` function receives two arguments:
+- **`element`** — the target DOM element receiving the HTML (useful for context-aware sanitizers)
+- **`html`** — the raw HTML string about to be inserted
+
+Return a sanitized string to replace the original, or `null` to suppress the insertion entirely. If `sanitize` is `true` but no `sanitizer` is provided, act throws a configuration error.
+
+> [!NOTE]
+> Sanitization only applies to **HTML string** insertion. `Element` and `DocumentFragment` values bypass the hook and are inserted directly.
 
 ## Contributing
 

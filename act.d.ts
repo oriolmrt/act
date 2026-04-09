@@ -22,8 +22,12 @@ declare namespace Act {
     startTime?: boolean;
     /** Enable HTML sanitization for insertContent operations */
     sanitize?: boolean;
-    /** Custom sanitizer function (e.g., DOMPurify.sanitize). Required when sanitize is true. */
-    sanitizer?: ((html: string) => string) | null;
+    /** Custom sanitizer function. Required when sanitize is true.
+     *  Receives the target element and the raw HTML string.
+     *  Return the sanitized HTML string, or `null` if the sanitizer handled
+     *  DOM insertion itself (e.g. via `element.setHTML()`), in which case
+     *  Act will skip its own `insertAdjacentHTML` call. */
+    sanitizer?: ((element: Element, html: string) => string | null) | null;
   }
 
   const config: Config;
@@ -38,7 +42,10 @@ declare namespace Act {
   // ============================================================================
 
   /**
-   * Configure Act.js with options from meta tags or window.__actConfig
+   * Configure Act.js with options from `<meta name="act-{key}" content="{value}">` tags.
+   * Keys are kebab-case and converted to camelCase (e.g. `act-start-time` → `startTime`).
+   * Values are JSON-parsed where possible, falling back to strings.
+   * Also drains all registered `install()` extension hooks.
    */
   function configure(): void;
 
@@ -405,7 +412,6 @@ declare namespace Act {
   class Lexer {
     static Token: new (type: string, value: string, index: number, line: number, column: number) => Token;
     static VALUES: Record<string, string>;
-    static PREFIXES: string[];
     static EXPRESSIONS: Record<string, string>;
     static OPERATORS: Record<string, string>;
     static SENTENCE_END: Record<string, string>;
@@ -436,6 +442,7 @@ declare namespace Act {
     constructor(source: Source);
     parse(): Scope;
     isKeyword(word: any): boolean;
+    isPrefix(word: any): boolean;
   }
 
   // ============================================================================
@@ -581,6 +588,46 @@ declare namespace Act {
     (ctx: Context, target: any, opts: any, ...args: any[]): any;
     [Symbol.toStringTag]?: string;
   }
+
+  // ============================================================================
+  // Extension System
+  // ============================================================================
+
+  /**
+   * A plugin object passed to `Act.extend()`.
+   * Both hooks are optional — omit whichever you don't need.
+   */
+  interface Extension {
+    /** Optional name for debugging and identification */
+    name?: string;
+    /**
+     * Called before `Act.start()` — use this to add library methods,
+     * register keywords/prefixes, or modify config.
+     * If `Act.extend()` is called after start, this fires immediately.
+     */
+    install?(act: typeof Act): void;
+    /**
+     * Called after `Act.start()` — use this for post-scan integrations.
+     * If `Act.extend()` is called after start, this fires immediately.
+     */
+    ready?(act: typeof Act): void;
+  }
+
+  /** All registered extensions, in registration order */
+  const extensions: Extension[];
+
+  /** True after `Act.start()` has completed */
+  const _started: boolean;
+
+  /**
+   * Register a plugin extension.
+   * - If called before `DOMContentLoaded`, hooks are queued and drained during init.
+   * - If called after `Act.start()`, `install()` and `ready()` fire immediately.
+   * @param plugin - Extension object with optional `install` and `ready` hooks,
+   *                 or a function (treated as `install`).
+   * @returns `Act` for chaining: `Act.extend(a).extend(b)`
+   */
+  function extend(plugin: Extension | ((act: typeof Act) => void)): typeof Act;
 }
 
 // ============================================================================
@@ -589,8 +636,6 @@ declare namespace Act {
 
 interface Window {
   Act: typeof Act;
-  /** Optional configuration object for Act.js */
-  __actConfig?: Partial<Act.Config>;
 }
 
 // ============================================================================

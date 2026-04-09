@@ -137,6 +137,20 @@
         },
     };
 
+    const signalKeyword = (name) =>
+        async (ctx, target, opts, [data]) => {
+            const signal = new Signal[name];
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
+        };
+
+    const throwSignal = (name) => () => { throw new Signal[name]; };
+
+    const getNamedEM = async (ctx, target, name) => {
+        const binding = Binder.from(target);
+        return binding ? binding.events[Binder.eventName(await ctx.asString(name, target))] : null;
+    };
+
     Library.keywords = {
         async case(ctx, target, opts, [value, ...args]) {
             const testValue = await ctx.asValueOf(value, target, opts);
@@ -353,9 +367,7 @@
                 }
             }
 
-            if (alias) em.alias = alias;
-
-            binding.addEvent(eventName, eventScope.source, options, em);
+            binding.addEvent(eventName, eventScope.source, options, em, alias);
             return true;
         },
 
@@ -372,7 +384,7 @@
                 if (em.observer.mutationObserver) em.observer.mutationObserver.disconnect();
             }
 
-            binding.element.removeEventListener(eventName, em.listener);
+            binding.element.removeEventListener(em.name, em.listener);
             delete binding.events[eventName];
             return true;
         },
@@ -392,39 +404,13 @@
             return false;
         },
 
-        async break(ctx, target, opts, [data]) {
-            const signal = new Signal.Break;
-            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
-            throw signal;
-        },
-
-        async stop(ctx, target, opts, [data]) {
-            const signal = new Signal.Stop;
-            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
-            throw signal;
-        },
-
-        async return(ctx, target, opts, [data]) {
-            const signal = new Signal.Return;
-            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
-            throw signal;
-        },
-
-        repeat() {
-            throw new Signal.Repeat;
-        },
-
-        restart() {
-            throw new Signal.Restart;
-        },
-
-        continue() {
-            throw new Signal.Continue;
-        },
-
-        halt() {
-            throw new Signal.Halt;
-        },
+        break: signalKeyword('Break'),
+        stop: signalKeyword('Stop'),
+        return: signalKeyword('Return'),
+        repeat: throwSignal('Repeat'),
+        restart: throwSignal('Restart'),
+        continue: throwSignal('Continue'),
+        halt: throwSignal('Halt'),
 
         async throw(ctx, target, opts, [error]) {
             if (is(error, Error)) throw error;
@@ -466,29 +452,24 @@
             const arg0 = await ctx.asValueOf(args[0], target);
             if (typeof arg0 === 'boolean') return ctx.eventManager.lock = arg0;
 
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
+            const em = await getNamedEM(ctx, target, args[0]);
             if (!em) return null;
-
             em.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
             return true;
         },
 
         async unlock(ctx, target, opts, args) {
             if (args.length === 0) return !(ctx.eventManager.lock = false);
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            const em = binding.events[Binder.eventName(await ctx.asString(args[0], target))];
+            const em = await getNamedEM(ctx, target, args[0]);
+            if (em === null) return null;
             if (em) em.lock = false;
             return true;
         },
 
         async is_locked(ctx, target, opts, args) {
             if (args.length === 0) return ctx.eventManager.lock;
-            const binding = Binder.from(target);
-            if (!binding) return null;
-            return binding.events[Binder.eventName(await ctx.asString(args[0], target))]?.lock;
+            const em = await getNamedEM(ctx, target, args[0]);
+            return em === null ? null : em?.lock;
         },
     };
 
@@ -579,16 +560,21 @@
         return { isClass, isAttribute, name: isClass? val.value.slice(1) : val.value };
     };
 
-    const sanitizeHTML = (html) => {
+    const sanitizeHTML = (element, html) => {
         if (!Act.config.sanitize) return html;
-        if (typeof Act.config.sanitizer === 'function') return Act.config.sanitizer(html);
-        throw new ActError('Act: sanitize is enabled but no sanitizer function provided. Set Act.config.sanitizer to a function (e.g., DOMPurify.sanitize).');
+        if (typeof Act.config.sanitizer === 'function') return Act.config.sanitizer(element, html);
+        throw new ActError('Act: sanitize is enabled but no sanitizer function provided. Set Act.config.sanitizer to a function that returns a sanitized string, or null if it handled insertion itself.');
     };
 
     const insertContent = (element, content, position) => {
         const val = unwrap(content);
-        if (is(val, Element, DocumentFragment)) position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
-        else element.insertAdjacentHTML(position, sanitizeHTML(val));
+        if (is(val, Element, DocumentFragment)) { 
+            position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
+        } else {
+            const sanitized = sanitizeHTML(element, val);
+            if (sanitized != null) element.insertAdjacentHTML(position, sanitized);
+        }
+        
         return element;
     };
 
@@ -804,17 +790,11 @@
         },
     };
 
-    Library.function = {};
-
     Library.object = {
         move_to(el, pos) {
             return moveContent(this, el, pos);
         },
     };
-
-    Library.boolean = {};
-    Library.number = {};
-    Library.bigint = {};
 
     Library.string = {
         after(str) {
@@ -840,8 +820,7 @@
         },
     };
 
-    Library.symbol = {};
-    Library.undefined = {};
+    for (const t of ['function', 'boolean', 'number', 'bigint', 'symbol', 'undefined']) Library[t] = {};
 
     // RESULTS
 
@@ -910,7 +889,7 @@
 
     class SelectorResult extends ComplexResult {
         get value() {
-            if (this.mode === 'closest') return this.parent.closest(this._value);
+            if (this.mode === 'closest') return this.parent.closest(this._value) || [];
             return this.parent.querySelectorAll(this._value);
         }
 
@@ -1200,14 +1179,11 @@
             if (selector.startsWith('> ')) {
                 selectorTarget = target;
                 selector = selector.slice(2);
-                if (selectorTarget.querySelector(selector) === null) return null;
             } else if (selector.startsWith('< ')) {
                 selectorTarget = is(target, Element) ? target : ctx.target;
-                if (selectorTarget.closest(selector.slice(2)) === null) return null;
                 return new SelectorResult(selector.slice(2), this, { parent: selectorTarget, mode: 'closest' });
             }
 
-            if (selectorTarget.querySelector(selector) === null) return null;
             return new SelectorResult(selector, this, { parent: selectorTarget });
         }
     }
@@ -1270,7 +1246,7 @@
     class Scope extends Solvable {
         value = [];
 
-        isRoot() { return this.scope === undefined; }
+        isRoot() { return !is(this.scope, Scope); }
 
         async solve(ctx, target, opts) {
             let result, skipStack = [];
@@ -1455,10 +1431,13 @@
             const fn = Library.get(key, target);
             if (fn !== undefined) return { solved: true, result: await Library.exec(fn, r, target, ctx, opts) };
 
-            const solvedR = await ctx.solveAll(r, target, opts);
-            if (is(target[key], Function)) return { solved: true, result: await target[key](...unwrapAll(solvedR)) };
-            if (is(unwrap(target)[key], Function)) return { solved: true, result: await unwrap(target)[key](...unwrapAll(solvedR)) };
-            if (is(window[key], Function)) return { solved: true, result: await window[key](...unwrapAll(solvedR)) };
+            const host = [target, unwrap(target), window].find(obj => is(obj?.[key], Function));
+            if (host !== undefined) {
+                const solvedR = await ctx.solveAll(r, target, opts);
+                return { solved: true, result: await host[key](...unwrapAll(solvedR)) };
+            }
+        } else if (is(l, SelectorResult) && unwrap(l).length > 0) {
+            return { solved: true, result: unwrap(l)[0] };
         }
 
         return { solved: false, result: null };
@@ -1523,21 +1502,23 @@
 
             for (let key of r) {
                 key = await ctx.solve(key, target, opts);
-                if (is(unwrap(l), Element)) {
+                const lResolved = is(unwrap(l), SelectorResult) ? unwrap(l).value : unwrap(l);
+                if (is(lResolved, Element)) {
                     if (is(from(key), Attribute, CSSProperty)) {
-                        l = await from(key).solve(ctx, unwrap(l), opts);
+                        l = await from(key).solve(ctx, lResolved, opts);
                         continue;
                     } else if (is(from(key), Variable)) {
                         l = new Result(
-                            Binder.from(unwrap(l)).data[from(key).value],
+                            Binder.from(lResolved).data[from(key).value],
                             this,
-                            { parent: Binder.from(unwrap(l)).data, key: from(key).value },
+                            { parent: Binder.from(lResolved).data, key: from(key).value },
                         );
                         continue;
                     }
                 }
 
                 l = unwrap(l);
+                if (is(l, SelectorResult)) l = l.value;
                 const keyValue = unwrap(key);
                 if (l === null || l === undefined) throw new ActError(`Cannot resolve member '${keyValue}' of ${l}.`);
                 const libFn = Library.get(keyValue, l);
@@ -1588,26 +1569,34 @@
     class IsTypeOperation extends Expression {
         async perform(ctx, target, opts) {
             let { l, r } = await this.prepare(ctx, target, opts);
-            const type = r.toString();
+            const unwrapped = unwrap(l), type = r.toString();
 
-            if (is(unwrap(l), Element)) {
-                if (is(from(r), Tag)) return unwrap(l).tagName.toLowerCase() === from(r).value.toLowerCase();
-                return unwrap(l).tagName.toLowerCase() === type.toLowerCase();
+            if (is(unwrapped, Element)) {
+                if (is(from(r), Tag)) return unwrapped.tagName.toLowerCase() === from(r).value.toLowerCase();
+                return unwrapped.tagName.toLowerCase() === type.toLowerCase();
             }
 
-            if (type === 'float') {
-                return typeof unwrap(l) === 'number' && !Number.isNaN(unwrap(l));
-            } else if (type === 'integer' || type === 'int') {
-                return typeof unwrap(l) === 'number' && Number.isInteger(unwrap(l));
+            switch (type) {
+                case 'float':
+                    return typeof unwrapped === 'number' && !Number.isNaN(unwrapped);
+                case 'integer':
+                case 'int':
+                    return typeof unwrapped === 'number' && Number.isInteger(unwrapped);
+                case 'string':
+                    return typeof unwrapped === 'string';
+                case 'boolean':
+                    return typeof unwrapped === 'boolean';
+                case 'object':
+                    return typeof unwrapped === 'object';
+                case 'array':
+                    return Array.isArray(unwrapped);
             }
 
+            if (unwrapped.constructor?.name === type) return true;
             let className = snakeToCamel(type);
             className = className.charAt(0).toUpperCase() + className.slice(1);
-            const resultFrom = from(through(l));
-            if (resultFrom && resultFrom.constructor?.name === className) return true;
-            const unwrapped = unwrap(l);
-            if (unwrapped != null && unwrapped.constructor?.name === className) return true;
-            return is(unwrap(l), r.value);
+            if (from(through(l)) && from(through(l)).constructor?.name === className) return true;
+            return unwrapped != null && unwrapped.constructor?.name === className;
         }
     }
 
@@ -1757,7 +1746,6 @@
     });
 
     class Lexer {
-        static debug = false;
         static Token = class {
             constructor(type, value, index, line, column) {
                 this.type = type;
@@ -1776,7 +1764,6 @@
             url: 'parseUrl',
             path: 'parsePath',
             list: 'parseList',
-            prefix: 'parsePrefixedValue',
             dot: 'parseClass',
             lcurly: 'parseSelectorTemplate',
             backtick: 'parseTemplateValue',
@@ -1794,7 +1781,6 @@
             lbrace: 'parseCollection'
         };
 
-        static PREFIXES = Object.keys(Library.prefixes);
 
         static EXPRESSIONS = {
             bang: 'parseCallExpressionEmpty',
@@ -1870,7 +1856,6 @@
             ['path', /\/\b[-a-zA-Z0-9@:%_+.~#?&\/=]*/],
             ['property', /:[a-zA-Z0-9_\-]+/],
             ['arrow', /->/],
-            ['prefix', RegExp(`\\b(?:${this.PREFIXES.join('|')})\\b`)],
             ['word', /[a-zA-Z0-9_\-]+/],
             ['colon', /:/],
             ['comma', /,/],
@@ -1915,7 +1900,7 @@
         hasMoreTokens() { return this.input.length > this.index; }
 
         setTplMode(tplMode) {
-            if (Lexer.debug) console.warn(`Lexer setTplMode: Lexer set to ${tplMode ? 'template' : 'language'} mode.`);
+            if (Act.config.lexerDebug) console.warn(`Lexer setTplMode: Lexer set to ${tplMode ? 'template' : 'language'} mode.`);
             this.tplMode = tplMode;
             this.regex = tplMode ? this.tplRegex : this.langRegex;
             this.regex.lastIndex = this.index;
@@ -2040,9 +2025,16 @@
         }
     }
     
-    class Parser {
-        static debug = false;
+    const parseURLValue = (lexer, scope, source, urlString, allowedProtocols) => {
+        if (urlString.length > 2048) lexer.fail(`URL exceeds maximum length of 2048 characters.`);
+        const url = URL.parse(urlString);
+        if (url === null) lexer.fail(`Invalid URL "${urlString}"`);
+        if (!allowedProtocols.includes(url.protocol))
+            lexer.fail(`Invalid protocol "${url.protocol}" in URL "${urlString}". Only ${allowedProtocols.join(', ')} are allowed.`);
+        return new ActURL(scope, source, { value: url });
+    };
 
+    class Parser {
         static VALUES = {
             word: [Word],
             number: [ActNumber, v => parseFloat(v)],
@@ -2079,6 +2071,10 @@
             return is(word, Word) && Object.hasOwn(Library.keywords, word.value);
         }
 
+        isPrefix(word) {
+            return is(word, Word) && Object.hasOwn(Library.prefixes, word.value);
+        }
+
         parse() {
             const root = new Scope(null, this.source);
             root.tokenStart = this.lexer.peek();
@@ -2090,7 +2086,7 @@
             }
 
             root.tokenEnd = this.lexer.peek();
-            if (Parser.debug) console.warn('Parser.parse() finished\n', root, this.source);
+            if (Act.config.parserDebug) console.warn('Parser.parse() finished\n', root, this.source);
             return root;
         }
 
@@ -2126,7 +2122,8 @@
             }
             if (this.lexer.tokenIs(...skip)) return l;
 
-            if (this.isKeyword(l)) l = this.parseKeywordExpression(scope, l);
+            if (this.isPrefix(l)) l = this.parsePrefixedValue(scope, l);
+            else if (this.isKeyword(l)) l = this.parseKeywordExpression(scope, l);
             if (this.lexer.tokenIsEnd() && !this.lexer.tokenIs('rparen', 'end')) return l;
 
             while (!this.lexer.tokenIsEnd() && this.lexer.hasMoreTokens()) {
@@ -2156,59 +2153,58 @@
             return operation;
         }
 
+        #makeExpressionWithList(ExprClass, scope, l) {
+            const expr = new ExprClass(scope, this.source, { tokenStart: l.tokenStart });
+            expr.l = l;
+            expr.r = new List;
+            return expr;
+        }
+
         parseKeywordExpression(scope, l) {
-            const keywordExpression = new KeywordExpression(scope, this.source, { tokenStart: l.tokenStart });
-            keywordExpression.l = l;
-            keywordExpression.r = new List;
+            const expr = this.#makeExpressionWithList(KeywordExpression, scope, l);
             this.lexer.fwd();
 
             while (!this.lexer.nextIf('comma') && this.lexer.hasMoreTokens() && !this.lexer.tokenIsEnd() && !this.lexer.tokenIsOperator()) {
-                keywordExpression.r.push(this.parseExpression(scope));
+                expr.r.push(this.parseExpression(scope));
                 this.lexer.fwd();
             }
 
-            keywordExpression.tokenEnd = this.lexer.peek();
-            return keywordExpression;
+            expr.tokenEnd = this.lexer.peek();
+            return expr;
         }
 
         parseAtExpression(scope, l) {
             this.lexer.expect('dot');
-            const atExpression = new AtExpression(scope, this.source, { tokenStart: l.tokenStart });
-            atExpression.l = l;
-            atExpression.r = new List;
+            const expr = this.#makeExpressionWithList(AtExpression, scope, l);
 
             while (this.lexer.nextIf('dot') && this.lexer.hasMoreTokens()) {
                 this.lexer.expect('word', 'attribute', 'cssProp', 'variable', 'lparen');
-                atExpression.r.push(this.parseValue(scope));
+                expr.r.push(this.parseValue(scope));
             }
 
-            atExpression.tokenEnd = this.lexer.prev();
-            return atExpression;
+            expr.tokenEnd = this.lexer.prev();
+            return expr;
         }
 
         parseSubscriptExpression(scope, l) {
             this.lexer.expect('lbrace');
-            const subscriptExpression = new SubscriptExpression(scope, this.source, { tokenStart: l.tokenStart });
-            subscriptExpression.l = l;
-            subscriptExpression.r = new List;
+            const expr = this.#makeExpressionWithList(SubscriptExpression, scope, l);
 
             while (this.lexer.nextIf('lbrace') && this.lexer.hasMoreTokens()) {
                 this.lexer.fwd().expectValue();
-                subscriptExpression.r.push(this.parseExpression(scope, ['rbrace']));
+                expr.r.push(this.parseExpression(scope, ['rbrace']));
                 this.lexer.fwd().nextIf('rbrace');
             }
 
-            subscriptExpression.tokenEnd = this.lexer.peek();
-            return subscriptExpression;
+            expr.tokenEnd = this.lexer.peek();
+            return expr;
         }
 
         parseCallExpressionEmpty(scope, l) {
             this.lexer.expect('bang').next();
-            const callExpression = new CallExpression(scope, this.source, { tokenStart: l.tokenStart });
-            callExpression.l = l;
-            callExpression.r = new List;
-            callExpression.tokenEnd = this.lexer.peek();
-            return callExpression;
+            const expr = this.#makeExpressionWithList(CallExpression, scope, l);
+            expr.tokenEnd = this.lexer.peek();
+            return expr;
         }
 
         parseInsertExpression(scope, l, skip = []) {
@@ -2229,50 +2225,44 @@
 
         parseCallExpression(scope, l, skip = []) {
             this.lexer.expect('call').consume();
-            const callExpression = new CallExpression(scope, this.source, { tokenStart: l.tokenStart });
-            callExpression.l = l;
-            callExpression.r = new List;
+            const expr = this.#makeExpressionWithList(CallExpression, scope, l);
 
             while (!this.lexer.tokenIs('comma') && !this.lexer.tokenIsEnd() && this.lexer.hasMoreTokens()) {
                 if (this.lexer.tokenIs(...skip)) break;
-                callExpression.r.push(this.parseExpression(scope, skip));
+                expr.r.push(this.parseExpression(scope, skip));
                 this.lexer.fwd();
             }
 
-            callExpression.tokenEnd = this.lexer.peek();
-            return callExpression;
+            expr.tokenEnd = this.lexer.peek();
+            return expr;
         }
 
         parseCallExpressionParens(scope, l, skip = []) {
             this.lexer.expect('lparen').consume();
-            const callExpression = new CallExpression(scope, this.source, { tokenStart: l.tokenStart });
-            callExpression.l = l;
-            callExpression.r = new List;
+            const expr = this.#makeExpressionWithList(CallExpression, scope, l);
 
             while (!this.lexer.nextIf('rparen') && this.lexer.hasMoreTokens()) {
                 if (this.lexer.tokenIs(...skip)) break;
-                callExpression.r.push(this.parseExpression(scope, skip));
+                expr.r.push(this.parseExpression(scope, skip));
                 this.lexer.fwdWithComma();
             }
 
-            callExpression.tokenEnd = this.lexer.prev();
-            return callExpression;
+            expr.tokenEnd = this.lexer.prev();
+            return expr;
         }
 
         parseActExpression(scope, l, skip = []) {
             this.lexer.expect('colon').consume();
-            const actExpression = new ActExpression(scope, this.source, { tokenStart: l.tokenStart });
-            actExpression.l = l;
-            actExpression.r = new List;
+            const expr = this.#makeExpressionWithList(ActExpression, scope, l);
 
             while (!this.lexer.nextIf('comma') && !this.lexer.tokenIsEnd() && this.lexer.hasMoreTokens()) {
                 if (this.lexer.tokenIs(...skip)) break;
-                actExpression.r.push(this.parseExpression(scope, skip));
+                expr.r.push(this.parseExpression(scope, skip));
                 this.lexer.fwd();
             }
 
-            actExpression.tokenEnd = this.lexer.peek();
-            return actExpression;
+            expr.tokenEnd = this.lexer.peek();
+            return expr;
         }
 
         parseValue(scope) {
@@ -2281,7 +2271,7 @@
             const value = this[Lexer.VALUES[this.lexer.peek().type]](scope);
             value.tokenStart = tokenStart;
             value.tokenEnd = this.lexer.peek();
-            if (!is(value, List, Spread, PrefixExpression)) this.lexer.next();
+            if (!is(value, List, Spread)) this.lexer.next();
             return value;
         }
 
@@ -2391,6 +2381,7 @@
 
             while (!this.lexer.tokenIs(endToken) && this.lexer.hasMoreTokens()) {
                 if (this.lexer.nextIf('lcurly')) {
+                    this.lexer.setTplMode(false);
                     while (!this.lexer.tplMode && this.lexer.hasMoreTokens()) {
                         const sentence = this.parseSentence(subscope);
                         if (sentence) {
@@ -2402,6 +2393,8 @@
                     }
 
                     this.lexer.next();
+                } else if (!this.lexer.tplMode) {
+                    this.lexer.setTplMode(true);
                 }
 
                 if (this.lexer.tokenIs(endToken, 'lcurly')) {
@@ -2443,26 +2436,12 @@
 
         parsePath(scope) {
             this.lexer.expect('path');
-            const urlString = window.location.origin + this.lexer.peek().value;
-            if (urlString.length > 2048) this.lexer.fail(`URL exceeds maximum length of 2048 characters.`);
-            const url = URL.parse(urlString);
-            if (url === null) this.lexer.fail(`Invalid URL "${urlString}"`);
-            if (!['http:', 'https:'].includes(url.protocol)) {
-                this.lexer.fail(`Invalid protocol "${url.protocol}" in URL "${urlString}". Only http: and https: are allowed.`);
-            }
-            return new ActURL(scope, this.source, { value: url });
+            return parseURLValue(this.lexer, scope, this.source, window.location.origin + this.lexer.peek().value, ['http:', 'https:']);
         }
 
         parseUrl(scope) {
             this.lexer.expect('url');
-            const urlString = this.lexer.peek().value;
-            if (urlString.length > 2048) this.lexer.fail(`URL exceeds maximum length of 2048 characters.`);
-            const url = URL.parse(urlString);
-            if (url === null) this.lexer.fail(`Invalid URL "${urlString}"`);
-            if (!['http:', 'https:', 'ws:', 'wss:', 'file:'].includes(url.protocol)) {
-                this.lexer.fail(`Invalid protocol "${url.protocol}" in URL "${urlString}". Only http:, https:, ws:, wss:, and file: are allowed.`);
-            }
-            return new ActURL(scope, this.source, { value: url });
+            return parseURLValue(this.lexer, scope, this.source, this.lexer.peek().value, ['http:', 'https:', 'ws:', 'wss:', 'file:']);
         }
 
         parseList(scope) {
@@ -2470,11 +2449,9 @@
             return new Spread(scope, this.source, { value: this.parseExpression(scope) });
         }
 
-        parsePrefixedValue(scope) {
-            this.lexer.expect('prefix');
-            const prefix = this.lexer.peek().value;
-            this.lexer.next().fwd().expectValue();
-            return new PrefixExpression(scope, this.source, { l: prefix, r: this.parseValue(scope) });
+        parsePrefixedValue(scope, l) {
+            this.lexer.fwd().expectValue();
+            return new PrefixExpression(scope, this.source, { l: l.value, r: this.parseValue(scope) });
         }
     }
 
@@ -2723,13 +2700,14 @@
             if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
             this.events[eventAlias] = eventManager;
             this.element.addEventListener(eventName, eventManager.listener, options);
-            if (eventName === 'act' && Act.config.start) this.element.dispatchEvent(new Event('act', { bubbles: false }));
+            if ((eventName === 'act' || eventName === 'load') && Act.config.start) this.element.dispatchEvent(new Event(eventName, { bubbles: false }));
         }
 
         parent() {
             let parent = this.element;
             while (parent = parent.parentNode) {
-                if (Binder.from(parent)) return Binder.from(parent);
+                const b = Binder.from(parent);
+                if (b) return b;
             }
         }
 
@@ -2820,7 +2798,7 @@
                         '\nElement binding:', initialTrace.context.binding.element,
                     );
 
-                    console.groupCollapsed('Stack trace');
+                    console.group('Stack trace');
                     for (const entry of e.actTrace) {
                         const s = entry.sentence, codeLines = s.code.split('\n'), firstLine = codeLines[0], hasMoreLines = codeLines.length > 1;
                         const beforeError = firstLine.substring(0, expr.tokenStart.index - s.tokenStart.index);
@@ -2949,26 +2927,35 @@
             convertToCamelCase: true,
             start: true,
             debug: false,
-            debugLexer: false,
-            debugParser: false,
+            lexerDebug: false,
+            parserDebug: false,
             startTime: true,
             sanitize: false,
             sanitizer: null,
         },
 
-        configure() {
-            const meta = document.querySelectorAll('meta[name="act-config"]');
-            const conf = {};
-            for (const m of meta) {
-                const i = m.content.indexOf(':');
-                if (i === -1) continue;
-                const k = m.content.substring(0, i).trim();
-                const v = m.content.substring(i + 1).trim();
-                conf[k] = JSON.parse(v);
+        extensions: [],
+        _started: false,
+
+        extend(plugin) {
+            if (typeof plugin === 'function') plugin = { install: plugin };
+            this.extensions.push(plugin);
+            if (this._started) {
+                plugin.install?.(this);
+                plugin.ready?.(this);
             }
-            Object.assign(this.config, conf, window.__actConfig || {});
-            if (this.config.debugLexer) Lexer.debug = true;
-            if (this.config.debugParser) Parser.debug = true;
+            return this;
+        },
+
+        configure() {
+            const conf = {};
+            for (const m of document.querySelectorAll('meta[name^="act-"]')) {
+                const key = m.name.slice(4).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+                try { conf[key] = JSON.parse(m.content); }
+                catch { conf[key] = m.content; }
+            }
+            Object.assign(this.config, conf);
+            for (const ext of this.extensions) ext.install?.(this);
         },
 
         start() {
@@ -2977,6 +2964,8 @@
             const bindedNodes = this.init(document.body, true);
             if (this.config.startTime) console.timeEnd('act start');
             document.body.dispatchEvent(new CustomEvent('actready', { bubbles: true, detail: { bindedNodes } }));
+            for (const ext of this.extensions) ext.ready?.(this);
+            this._started = true;
         },
 
         init(root, bindRoot, force) {
