@@ -1,6 +1,7 @@
 Act.extend({
-    name: 'act-ext',
+    name: 'act-collapse',
     install(Act) {
+        console.log('Act extension installed');
         Act.Library.Element.collapse = function (time = 250, timing = 'linear') {
             const computedStyle = window.getComputedStyle(this);
             const spacingProps = ['marginTop', 'marginBottom', 'paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'];

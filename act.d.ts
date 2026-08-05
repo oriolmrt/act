@@ -37,6 +37,12 @@ declare namespace Act {
    */
   const version: string;
 
+  /** True once start() has finished */
+  const hasStarted: boolean;
+
+  /** True from the moment start() begins; gates the initial act/load dispatch */
+  const isStartingUp: boolean;
+
   // ============================================================================
   // Core API
   // ============================================================================
@@ -60,7 +66,7 @@ declare namespace Act {
    * @param bindRoot - Whether to bind the root element itself
    * @param force - Force re-initialization even if already bound
    */
-  function init(root: Element, bindRoot?: boolean, force?: boolean): void;
+  function init(root: Element, bindRoot?: boolean, force?: boolean): Element[] | undefined;
 
   /**
    * Run Act.js code on a target element
@@ -109,6 +115,16 @@ declare namespace Act {
    * @param value - Result to traverse
    */
   function through(value: Result): Result;
+
+  /**
+   * Create an Abortable operation.
+   * @param handlers.perform - Receives a `done` callback; call it or return a Promise to signal completion
+   * @param handlers.abort - Called when the operation is aborted early
+   */
+  function abortable(handlers: {
+    perform: (done: () => void) => any;
+    abort?: () => void;
+  }): Abortable;
 
   // ============================================================================
   // Library (Extensible Act methods)
@@ -186,7 +202,7 @@ declare namespace Act {
       /** Run a named block defined with def */
       run: (ctx: Context, target: any, opts: any, args: any[]) => Promise<any>;
       /** Define a named reusable block */
-      def: (ctx: Context, target: any, opts: any, args: any[]) => void;
+      def: (ctx: Context, target: any, opts: any, args: any[]) => Promise<void>;
       /** Iterate over an iterable */
       each: (ctx: Context, target: any, opts: any, args: any[]) => Promise<any>;
       /** Numeric for loop */
@@ -201,8 +217,12 @@ declare namespace Act {
       on: (ctx: Context, target: any, opts: any, args: any[]) => Promise<boolean>;
       /** Remove event listener */
       off: (ctx: Context, target: any, opts: any, args: any[]) => Promise<boolean>;
-      /** Halt a running event */
+      /** Halt a running event immediately, aborting in-flight operations */
       kill: (ctx: Context, target: any, opts: any, args: any[]) => Promise<boolean>;
+      /** Gracefully stop a running event: the current sentence completes, the rest are skipped */
+      finish: (ctx: Context, target: any, opts: any, args: any[]) => Promise<boolean>;
+      /** Wait until the target dispatches an event; resolves with the event */
+      wait_until: (ctx: Context, target: any, opts: any, args: any[]) => Promise<Event>;
       /** Break out of a loop with optional data */
       break: (ctx: Context, target: any, opts: any, args: any[]) => Promise<never>;
       /** Stop event execution with optional data */
@@ -231,8 +251,6 @@ declare namespace Act {
       unlock: (ctx: Context, target: any, opts: any, args: any[]) => Promise<boolean>;
       /** Check if an event handler is locked */
       is_locked: (ctx: Context, target: any, opts: any, args: any[]) => Promise<boolean | null>;
-      /** Declare or nullify a variable */
-      let: (ctx: Context, target: any, opts: any, args: any[]) => Promise<any>;
       [key: string]: (ctx: Context, target: any, opts: any, args: any[]) => any;
     };
 
@@ -270,9 +288,7 @@ declare namespace Act {
       /** Show an element (display: '') */
       show(): void;
       /** Animate CSS transitions */
-      transition(...args: any[]): Promise<void>;
-      /** Trigger a custom event on the element */
-      trigger(e: string, bubbles?: boolean, detail?: any): Element;
+      transition(...args: any[]): Abortable;
       /** Move element to a new position */
       move_to(element: Element | Result | string, position?: string): Element;
       /** Remove all children */
@@ -283,6 +299,10 @@ declare namespace Act {
       prepend(content: any): Element;
       /** Append content to the element */
       append(content: any): Element;
+      /** Replace the element's inner HTML (honours config.sanitize) */
+      set_html(content: any): Element;
+      /** Replace the element itself (honours config.sanitize) */
+      set_outer_html(content: any): Element;
       /** Fade element in or out */
       fade(inout: 'in' | 'out', time?: number | string, timing?: string): Promise<void>;
       /** Check if element is in viewport */
@@ -325,10 +345,16 @@ declare namespace Act {
       [key: string]: ActMethod | ((...args: any[]) => any);
     };
 
-    /** Methods available for Object targets */
+    /**
+     * Methods available for any object target — consulted for Elements, Arrays,
+     * collections and plain objects alike, whenever the more specific bucket
+     * for the target has no match.
+     */
     object: {
       /** Move content to an element */
       move_to(el: Element, pos?: string): any;
+      /** Dispatch an event on the target. Throws unless the target is an event target. */
+      trigger<T>(e: string, bubbles?: boolean, detail?: any): T;
       [key: string]: (...args: any[]) => any;
     };
 
@@ -363,7 +389,7 @@ declare namespace Act {
 
   interface Binder {
     /** Property name used for storing bindings on elements */
-    readonly PROP: '__act__';
+    readonly BINDING_PROPERTY: '__act__';
     /** Attribute names that trigger Act binding */
     readonly ATTRIBUTES: ['act', 'act-block'];
     /** Valid event options */
@@ -376,12 +402,35 @@ declare namespace Act {
       actoffview: 'actoffview';
     };
 
+    /** The sigils that introduce each part of an event attribute name */
+    readonly PART_SIGILS: { ':': 'option'; '.': 'key'; '#': 'alias' };
+
     /**
-     * Get or create a binding for an element
-     * @param element - Element to get binding for
-     * @param create - If true, create a new binding if none exists
+     * Get the binding attached to an element, if it has one
+     * @param element - Element to get the binding for
      */
-    from(element: Element, create?: boolean): Binding | undefined;
+    from(element: Element): Binding | undefined;
+
+    /**
+     * Get the binding attached to an element, creating one if missing
+     * @param element - Element to get or create the binding for
+     */
+    ensure(element: Element): Binding;
+
+    /**
+     * Read a name from an event attribute spec: either [verbatim] or bare
+     * @param spec - The spec being parsed
+     * @param fromIndex - Where in the spec to start reading
+     */
+    readName(spec: string, fromIndex: number): { value: string; next: number } | null;
+
+    /**
+     * Parse one handler spec from an `act@…` attribute name
+     * @param spec - A single comma-free spec
+     */
+    parseEventSpec(spec: string):
+      | { event: string; alias: string | null; options: Record<string, any> }
+      | { error: string };
 
     /**
      * Normalize event name (handles intersection events)
@@ -415,22 +464,24 @@ declare namespace Act {
     static EXPRESSIONS: Record<string, string>;
     static OPERATORS: Record<string, string>;
     static SENTENCE_END: Record<string, string>;
-    static TOKENS: Array<[string, RegExp]>;
-    static TPL_TOKENS: Array<[string, RegExp]>;
+    static TOKENS_BY_PRECEDENCE: Array<[string, RegExp]>;
 
     constructor(input: string);
     hasMoreTokens(): boolean;
     next(): this;
     consume(...types: string[]): this | boolean;
     peek(): Token;
-    prev(): Token;
-    fwd(): this;
-    fwdWithComma(): this;
+    previous(): Token;
+    peekChar(): string | undefined;
+    consumeChar(): string | undefined;
+    scanRaw(stopChars: string[]): string;
+    skipSpaces(): this;
+    skipSpacesAndCommas(): this;
     tokenIs(...types: string[]): boolean;
     tokenIsEnd(): boolean;
     tokenIsValue(): boolean;
     tokenIsExpression(): boolean;
-    tokenIsOperator(): string | undefined;
+    tokenIsOperator(): boolean;
     expect(...types: string[]): this;
     expectValue(): this;
     expectEnd(): this;
@@ -443,6 +494,18 @@ declare namespace Act {
     parse(): Scope;
     isKeyword(word: any): boolean;
     isPrefix(word: any): boolean;
+  }
+
+  // ============================================================================
+  // Abortable
+  // ============================================================================
+
+  class Abortable {
+    /** The underlying promise that resolves when the operation completes */
+    value: Promise<any>;
+    /** Abort the operation early */
+    abort: () => void;
+    constructor(value: Promise<any>, abort: () => void);
   }
 
   // ============================================================================
@@ -510,14 +573,27 @@ declare namespace Act {
     solve(ctx: Context, target: any, opts: any): Promise<any>;
   }
 
+  /** Where a piece of act code came from */
+  type SourceType = 'directAttribute' | 'inlineScript' | 'externalScript' | 'actrun';
+
   interface Source {
     readonly code: string;
     readonly element: Element;
-    readonly type: 'directAttribute' | 'inlineScript' | 'externalScript' | 'actrun';
+    readonly type: SourceType;
     readonly scope: Scope | null;
     readonly attr: Attr | null;
     readonly args: string[];
   }
+
+  /** Static side of Source: the source types, keyed by name */
+  const Source: {
+    readonly TYPE: {
+      readonly ATTRIBUTE: 'directAttribute';
+      readonly INLINE_SCRIPT: 'inlineScript';
+      readonly EXTERNAL_SCRIPT: 'externalScript';
+      readonly ACT_RUN: 'actrun';
+    };
+  };
 
   interface Scope extends Solvable {
     readonly value: Sentence[];
@@ -525,10 +601,24 @@ declare namespace Act {
     lookup(ctx: Context, key: string, defaultThisScope?: boolean): Result | undefined;
   }
 
+  /** How a sentence runs, decided by its terminator */
+  type SentenceMode = 'sync' | 'async' | 'condition' | 'branch' | 'fwd';
+
   interface Sentence extends Solvable {
-    readonly mode: 'sync' | 'async' | 'condition' | 'branch' | 'fwd';
+    readonly mode: SentenceMode;
     readonly target?: Solvable;
   }
+
+  /** Static side of Sentence: the execution modes, keyed by name */
+  const Sentence: {
+    readonly MODE: {
+      readonly SYNC: 'sync';
+      readonly ASYNC: 'async';
+      readonly CONDITION: 'condition';
+      readonly BRANCH: 'branch';
+      readonly FORWARD: 'fwd';
+    };
+  };
 
   interface Context {
     readonly binding: Binding;
@@ -536,6 +626,10 @@ declare namespace Act {
     readonly event: Event | null;
     readonly eventManager: EventManager;
     readonly source: Source;
+    readonly abortSignal: AbortSignal;
+    readonly abortController: AbortController;
+    /** Set by the `finish` keyword: execution stops at the next sentence boundary */
+    finishing: boolean;
     readonly data: WeakMap<Scope, Record<string, any>>;
     solve(value: any, target: any, opts?: any): Promise<any>;
     solveAll(values: any[], target: any, opts?: any): Promise<any[]>;
@@ -572,15 +666,11 @@ declare namespace Act {
     readonly contexts: Set<Context>;
     readonly listener: (ev: Event) => any;
     lock: boolean;
-    halt: boolean;
-    alias?: string;
     observer?: {
       intersectionObserver: IntersectionObserver;
       mutationObserver: MutationObserver | null;
     };
     run(target: any, event?: Event): Promise<any>;
-    attach(context: Context): void;
-    detach(context: Context): void;
   }
 
   /** Function marked as an Act method that receives context, target, and opts */

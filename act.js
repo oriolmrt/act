@@ -4,25 +4,33 @@
         if (Act.config.start) Act.start();
     });
 
-    // CORE UTILITIES
-
-    const is = (value, ...classes) => {
+    const is = (value, ...types) => {
         if (value === undefined || value === null) return false;
-        for (const c of classes) {
-            if (value instanceof c || value?.constructor === c) return true;
+
+        for (const type of types) {
+            if (typeof type === 'string') {
+                if (typeof value === type) return true;
+            } else if (value instanceof type || value?.constructor === type) {
+                return true;
+            }
         }
+
         return false;
     };
 
+    const ACT_FUNCTION = Symbol('actFunction');
     const isActFunction = (value) => is(value, Function) && value[ACT_FUNCTION];
+
     const unwrap = (value) => is(value, Result) ? value.value : value;
     const unwrapAll = (values) => values.map(unwrap);
     const from = (value) => is(value, Result) ? value.from : undefined;
     const through = (value) => is(value, Result) ? value.through : value;
-    const snakeToCamel = (str) => {
-        if (is(str, Solvable)) str = str.value;
-        if (typeof str !== 'string') return str;
-        const camel = str.toLowerCase().replace(/[-_][a-z]/g, (group) => group[1].toUpperCase());
+
+    const snakeToCamel = (text) => {
+        if (is(text, Solvable)) text = text.value;
+        if (typeof text !== 'string') return text;
+
+        const camel = text.toLowerCase().replace(/[-_][a-z]/g, (group) => group[1].toUpperCase());
         if (camel.toLowerCase() === 'innerhtml') return 'innerHTML';
         if (camel.toLowerCase() === 'outerhtml') return 'outerHTML';
         return camel;
@@ -34,795 +42,22 @@
         return key;
     };
 
-    const regexEscape = (str) => { 
-        return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); 
-    };
-
-    // LIBRARY (Built-in functions)
-
-    const ACT_FUNCTION = Symbol('actFunction');
-
-    const Library = {
-        method(fn) {
-            fn[ACT_FUNCTION] = true;
-            return fn;
-        },
-
-        get(name, target) {
-            if (is(target, Element) && Object.hasOwn(this.Element, name)) {
-                return this.Element[name];
-            } else if (Array.isArray(target) && Object.hasOwn(this.Array, name)) {
-                return this.Array[name];
-            } else if (Object.hasOwn(this[typeof target], name)) {
-                return this[typeof target][name];
-            } else if (Object.hasOwn(this.globals, name)) {
-                return this.globals[name];
-            }
-        },
-
-        async exec(fn, args, target, context, opts) {
-            if (is(fn, Result)) return await this.exec(fn.value, args, fn.parent, fn.context || context, opts);
-            if (isActFunction(fn)) return await fn(context, target, opts, ...args);
-            if (is(fn, Function)) return await fn.call(target, ...await context.solveAll(args, target));
-        },
-    };
-
-    Library.words = {
-        me: (ctx, target) => target,
-        source_element: (ctx) => ctx.binding.element,
-        original_target: (ctx) => ctx.target,
-        undefined: () => undefined,
-        NaN: () => NaN,
-        debugger: () => { debugger; },
-        true: () => true,
-        false: () => false,
-        null: () => null,
-        document: () => document,
-        window: () => window,
-        js: () => window,
-        Act: () => Act,
-    };
-
-    Library.prefixes = {
-        async first(ctx, target, opts, value) {
-            return (await ctx.asValueOf(value, target, opts))[0];
-        },
-
-        async last(ctx, target, opts, value) {
-            const result = await ctx.asValueOf(value, target, opts);
-            return result[result.length - 1];
-        },
-
-        global(ctx, target, opts, value) {
-            return new Result(Act.globals[value.value], this, { parent: Act.globals, key: value.value });
-        },
-
-        local(ctx, target, opts, value) {
-            const parent = Binder.from(target, true).data;
-            return new Result(parent[value.value], this, { parent, key: value.value });
-        },
-
-        scoped(ctx, target, opts, value) {
-            const parent = ctx.scopeData(this.scope);
-            return new Result(parent[value.value], this, { parent, key: value.value });
-        },
-
-        async not(ctx, target, opts, value) {
-            return !(await ctx.asValueOf(value, target));
-        },
-
-        async negative(ctx, target, opts, value) {
-            return -(await ctx.asValueOf(value, target));
-        },
-
-        async type(ctx, target, opts, value) {
-            const val = await ctx.solve(value, target, opts);
-            return from(val)?.constructor.name || typeof unwrap(val);
-        },
-
-        async wat(ctx, target, opts, value) {
-            const result = await ctx.solve(value, target, opts);
-            console.log(
-                '🤷 Act WAT?\n',
-                'Value:', value, '\n',
-                'Result:', result, '\n',
-                'Unwrapped Result:', unwrap(result), '\n',
-                'Target:', target, '\n',
-                'Scope:', this.scope, '\n',
-                'Context:', ctx, '\n',
-                'Code:', value.code, '\n'
-            );
-
-            return result;
-        },
-    };
-
-    const signalKeyword = (name) =>
-        async (ctx, target, opts, [data]) => {
-            const signal = new Signal[name];
-            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
-            throw signal;
-        };
-
-    const throwSignal = (name) => () => { throw new Signal[name]; };
-
-    const getNamedEM = async (ctx, target, name) => {
-        const binding = Binder.from(target);
-        return binding ? binding.events[Binder.eventName(await ctx.asString(name, target))] : null;
-    };
-
-    Library.keywords = {
-        async case(ctx, target, opts, [value, ...args]) {
-            const testValue = await ctx.asValueOf(value, target, opts);
-            
-            for (let i = 0; i < args.length; i++) {
-                const keyword = args[i];
-                
-                if (!is(keyword, Word)) return;
-                if (keyword.value === 'when') {
-                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
-                    const scope = args[++i];
-                    if (testValue === matchValue) return await ctx.solve(scope, target, opts);
-                } else if (keyword.value === 'like') {
-                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
-                    const scope = args[++i];
-                    if (testValue == matchValue) return await ctx.solve(scope, target, opts);
-                } else if (keyword.value === 'else') {
-                    return await ctx.solve(args[++i], target, opts);
-                }
-            }
-            
-        },
-
-        async let(ctx, target, opts, [value]) {
-            value = await ctx.solve(value, target, opts);
-            
-            if (!is(value, Result)) {
-                const parent = ctx.scopeData(this.scope);
-                value = new Result(null, this, { parent, key: value.value });
-            }
-
-            value.set(null);
-            return value;
-        },
-
-        async run(ctx, target, opts, [name, ...args]) {
-            name = await ctx.asString(name, target);
-            const block = ctx.binding.getBlock(name) ?? Binder.from(target).getBlock(name);
-            if (!block) throw new ActError(`Block '${name}' not found.`);
-
-            const data = ctx.scopeData(block.scope);
-            data.__fromScope__ = this.scope;
-
-            for (let i = 0; i < block.args.length; i++) {
-                const arg = block.args[i];
-
-                if (Array.isArray(arg)) {
-                    data[arg[0]] = await Promise.all(
-                        args.slice(i).map(a => ctx.solve(a, target, opts))
-                    );
-                    break;
-                }
-
-                data[arg] = await ctx.solve(args[i], target, opts);
-            }
-
-            return await ctx.solve(block.scope, target, opts);
-        },
-
-        def(ctx, target, opts, args) {
-            const name = args[0].value, body = args[args.length - 1];
-            const vars = args.slice(1, -1).map(arg => is(arg, List) ? [arg.value[0].value] : arg.value);
-            Binder.from(target, true).blocks[name] = { args: vars, scope: body };
-        },
-
-        async each(ctx, target, opts, args) {
-            let iterable = target, solvable = args[0], name;
-
-            if (is(args[1], Word) && args[1].value === 'in') {
-                name = args[0].value;
-                iterable = await ctx.asValueOf(args[2], target);
-                solvable = args[3];
-            } else if (is(args[2], Word) && args[2].value === 'in') {
-                iterable = await ctx.asValueOf(args[3], target);
-                solvable = args[4];
-
-                for (const [key, value] of Object.entries(iterable)) {
-                    ctx.scopeData(solvable)[args[0].value] = key;
-                    ctx.scopeData(solvable)[args[1].value] = value;
-                    try { 
-                        await ctx.solve(solvable, iterable, opts); 
-                    } catch (e) {
-                        if (is(e, Signal.Break)) return e.data;
-                        if (is(e, Signal.Continue)) continue;
-                        throw e;
-                    }
-                }
-                return iterable;
-            }
-
-            for (let i of iterable) {
-                try {
-                    if (name) ctx.scopeData(solvable)[name] = new Result(i, this);
-                    await ctx.solve(solvable, (name ? target : i), opts);
-                } catch (e) {
-                    if (is(e, Signal.Break)) return e.data;
-                    if (is(e, Signal.Continue)) continue;
-                    throw e;
-                }
-            }
-        },
-
-        async for(ctx, target, opts, args) {
-            const name = args[0].value;
-            let idx = 1, start = 0;
-
-            if (args[idx]?.value === 'from') { 
-                start = await ctx.asValueOf(args[2], target); 
-                idx += 2; 
-            }
-
-            if (args[idx].value !== 'to') throw new ActError('Invalid for loop syntax: missing "to" word.');
-
-            const end = await ctx.asValueOf(args[idx + 1], target);
-            idx += 2;
-
-            let step = 1, stepDefined = false;
-            if (args[idx]?.value == 'step') {
-                step = await ctx.asValueOf(args[idx + 1], target);
-                stepDefined = true;
-            }
-
-            const scope = args.at(-1), asc = (start <= end);
-            if (!stepDefined) step = asc ? 1 : -1;
-
-            for (let i = start; asc ? i <= end : i >= end; i += step) {
-                try {
-                    ctx.scopeData(scope)[name] = i;
-                    await ctx.solve(scope, target);
-                } catch (e) {
-                    if (is(e, Signal.Break)) return e.data;
-                    if (is(e, Signal.Continue)) continue;
-                    throw e;
-                }
-            }
-        },
-
-        async if(ctx, target, opts, [condition, trueBranch, elseKw, elseBranch]) {
-            if (await ctx.asValueOf(condition, target)) return await ctx.solve(trueBranch, target, opts);
-            if (await ctx.asString(elseKw, target) === 'else') return await ctx.solve(elseBranch, target, opts);
-        },
-
-        async loop(ctx, target, opts, [solvable]) {
-            for (;;) {
-                try { 
-                    await ctx.solve(solvable, target, opts); 
-                } catch (e) {
-                    if (is(e, Signal.Break)) return e.data;
-                    if (is(e, Signal.Continue)) continue;
-                    throw e;
-                }
-            }
-        },
-
-        async new(ctx, target, opts, [constructor, ...args]) {
-            if (is(constructor, Tag)) return document.createElement(constructor.value);
-            let value = await ctx.asValueOf(constructor, target);
-            args = await ctx.solveAll(args, target, opts);
-
-            try { 
-                return new value(...args); 
-            } catch (e) { 
-                return new window[value.toString()](...args); 
-            }
-        },
-
-        async on(ctx, target, opts, [eventNameOrAlias, ...args]) {
-            target = await ctx.asValueOf(target);
-            let eventName, alias;
-
-            if (is(eventNameOrAlias, ActObject)) {
-                const obj = await ctx.asValueOf(eventNameOrAlias, target);
-                const keys = Object.keys(obj);
-                alias = keys[0];
-                eventName = Binder.eventName(obj[alias].toString());
-            } else {
-                eventName = Binder.eventName(await ctx.asString(eventNameOrAlias, target));
-            }
-
-            let options = {}, matchingSelector = null;
-            const eventScope = args.at(-1);
-
-            for (let i = 0; i < args.length - 1; i++) {
-                const arg = args[i];
-
-                if (is(arg, Word)) {
-                    const argValue = arg.value;
-                    if (argValue === 'matching') {
-                        matchingSelector = await ctx.asString(args[++i], target);
-                    } else {
-                        options[argValue] = true;
-                    }
-                } else if (is(arg, ActObject)) {
-                    Object.assign(options, await ctx.asValueOf(arg, target));
-                }
-            }
-
-            const binding = Binder.from(target, true);
-            const em = new EventManager(binding, eventName, options, eventScope.source, eventScope);
-            const isIntersectEvent = Object.keys(Binder.INTERSECT_EVENTS).includes(eventName);
-
-            if (matchingSelector) {
-                if (isIntersectEvent) {
-                    options.matchingSelector = matchingSelector;
-                } else {
-                    em.listener = (e) => {
-                        let el = e.target;
-                        while (el && el !== target) {
-                            if (el.matches(matchingSelector)) return em.run(el, e);
-                            el = el.parentElement;
-                        }
-                        if (target.matches(matchingSelector) && el === target) return em.run(target, e);
-                    };
-                }
-            }
-
-            binding.addEvent(eventName, eventScope.source, options, em, alias);
-            return true;
-        },
-
-        async off(ctx, target, opts, [eventName]) {
-            target = await ctx.asValueOf(target);
-            const binding = Binder.from(target);
-            if (!binding) return false;
-
-            eventName = Binder.eventName(await ctx.asString(eventName, target));
-            const em = binding.events[eventName];
-            if (!em) return false;
-            if (em.observer) {
-                if (em.observer.intersectionObserver) em.observer.intersectionObserver.disconnect();
-                if (em.observer.mutationObserver) em.observer.mutationObserver.disconnect();
-            }
-
-            binding.element.removeEventListener(em.name, em.listener);
-            delete binding.events[eventName];
-            return true;
-        },
-
-        async kill(ctx, target, opts, [eventName]) {
-            target = await ctx.asValueOf(target);
-            if (!is(target, Element)) return false;
-
-            const binding = Binder.from(target);
-            if (!binding) return false;
-
-            eventName = Binder.eventName(await ctx.solve(eventName, target, opts));
-            const eventManager = binding.events[eventName];
-            if (!eventManager) return false;
-
-            if (eventManager.contexts.size > 0) return eventManager.halt = true;
-            return false;
-        },
-
-        break: signalKeyword('Break'),
-        stop: signalKeyword('Stop'),
-        return: signalKeyword('Return'),
-        repeat: throwSignal('Repeat'),
-        restart: throwSignal('Restart'),
-        continue: throwSignal('Continue'),
-        halt: throwSignal('Halt'),
-
-        async throw(ctx, target, opts, [error]) {
-            if (is(error, Error)) throw error;
-            throw new ActError(await ctx.asValueOf(error, target));
-        },
-
-        async while(ctx, target, opts, [condition, body]) {
-            while (await ctx.asValueOf(condition, target)) {
-                try {
-                    await ctx.solve(body, target, opts);
-                } catch (e) {
-                    if (is(e, Signal.Break)) return e.data;
-                    if (is(e, Signal.Continue)) continue;
-                    throw e;
-                }
-            }
-        },
-
-        async with(ctx, target, opts, [object, body]) {
-            const withTarget = await ctx.solve(object, target, opts);
-            await ctx.solve(body, unwrap(withTarget), opts);
-            return withTarget;
-        },
-
-        async debounce(ctx, target, opts, [time, scope]) {
-            clearTimeout(scope.__debounceTimeout__ || 0);
-            const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
-
-            return new Promise(resolve => {
-                scope.__debounceTimeout__ = setTimeout(async () => {
-                    resolve(await ctx.solve(scope, target, opts));
-                    delete scope.__debounceTimeout__;
-                }, ms);
-            });
-        },
-
-        async lock(ctx, target, opts, args) {
-            if (args.length === 0) return ctx.eventManager.lock = true;
-            const arg0 = await ctx.asValueOf(args[0], target);
-            if (typeof arg0 === 'boolean') return ctx.eventManager.lock = arg0;
-
-            const em = await getNamedEM(ctx, target, args[0]);
-            if (!em) return null;
-            em.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
-            return true;
-        },
-
-        async unlock(ctx, target, opts, args) {
-            if (args.length === 0) return !(ctx.eventManager.lock = false);
-            const em = await getNamedEM(ctx, target, args[0]);
-            if (em === null) return null;
-            if (em) em.lock = false;
-            return true;
-        },
-
-        async is_locked(ctx, target, opts, args) {
-            if (args.length === 0) return ctx.eventManager.lock;
-            const em = await getNamedEM(ctx, target, args[0]);
-            return em === null ? null : em?.lock;
-        },
-    };
-
-    Library.globals = {
-        listens_to(eventName) {
-            const binding = Binder.from(this);
-            return binding && Object.hasOwn(binding.events, eventName?.toString() ?? '');
-        },
-
-        is_running(eventName = null) {
-            const binding = Binder.from(this);
-            if (!binding) return null;
-
-            if (eventName === null) {
-                for (const em of Object.values(binding.events)) if (em.contexts.size > 0) return true;
-                return false;
-            }
-
-            const em = binding.events[Binder.eventName(eventName.toString())];
-            return em ? em.contexts.size : false;
-        },
-
-        async tick() {
-            await new Promise(r => requestAnimationFrame(r));
-        },
-
-        wait(time) { 
-            return new Promise(r => setTimeout(r, Library.globals.time_to_ms(time))); 
-        },
-
-        log_raw: (...args) => console.log(...args),
-        log: (...args) => console.log(...unwrapAll(args)),
-        warn: (...args) => console.warn(...unwrapAll(args)),
-        error: (...args) => console.error(...unwrapAll(args)),
-
-        time_to_ms(t) {
-            if (typeof t === 'number') return t;
-            t = t.toString();
-            const u = t.match(/[a-z]+$/)?.[0], v = parseFloat(t);
-            return !u ? (isNaN(v) ? 0 : v) : v * ({ ms: 1, s: 1000, m: 60000, h: 3600000 }[u] || 1);
-        },
-
-        random(min, max) {
-            min = Number(min) || 0;
-            max = Number(max) || 0;
-            if (Number.isInteger(min) && Number.isInteger(max)) return Math.floor(Math.random() * (max - min + 1)) + min;
-            return Math.random() * (max - min) + min;
-        },
-    };
-
-    Library.Array = (function () {
-        const wrap = (op) => Library.method(async (ctx, target, opts, fn) => {
-            fn = await ctx.solve(fn, target, opts);
-            const exec = (i) => isActFunction(fn)
-                ? fn(ctx, target[i], opts, target[i], i, target)
-                : fn(target[i], i, target);
-
-            if (op === 'map') return Promise.all(target.map((_, i) => exec(i)));
-            if (op === 'filter') {
-                const res = await Promise.all(target.map((_, i) => exec(i)));
-                return target.filter((_, i) => res[i]);
-            }
-            for (let i = 0; i < target.length; i++) {
-                const res = await exec(i);
-                if (op === 'find' && res) return target[i];
-                if (op === 'find_index' && res) return i;
-                if (op === 'some' && res) return true;
-                if (op === 'every' && !res) return false;
-            }
-            if (op === 'find_index') return -1;
-            if (op === 'some') return false;
-            if (op === 'every') return true;
-        });
-
-        return {
-            map: wrap('map'),
-            filter: wrap('filter'),
-            for_each: wrap('for_each'),
-            find: wrap('find'),
-            find_index: wrap('find_index'),
-            some: wrap('some'),
-            every: wrap('every'),
-        };
-    })();
-
-    const classifyValue = (source) => {
-        const val = from(through(source)), isClass = is(val, ActClass), isAttribute = is(val, Attribute);
-        return { isClass, isAttribute, name: isClass? val.value.slice(1) : val.value };
-    };
-
-    const sanitizeHTML = (element, html) => {
-        if (!Act.config.sanitize) return html;
-        if (typeof Act.config.sanitizer === 'function') return Act.config.sanitizer(element, html);
-        throw new ActError('Act: sanitize is enabled but no sanitizer function provided. Set Act.config.sanitizer to a function that returns a sanitized string, or null if it handled insertion itself.');
-    };
-
-    const insertContent = (element, content, position) => {
-        const val = unwrap(content);
-        if (is(val, Element, DocumentFragment)) { 
-            position === 'afterbegin' ? element.insertBefore(val, element.firstChild) : element.appendChild(val);
-        } else {
-            const sanitized = sanitizeHTML(element, val);
-            if (sanitized != null) element.insertAdjacentHTML(position, sanitized);
-        }
-        
-        return element;
-    };
-
-    const moveContent = (nodes, target, pos = 'beforeend') => {
-        target = unwrap(target);
-        if (typeof target === 'string') target = document.querySelector(target);
-        if (!target) return nodes;
-
-        const isList = is(nodes, DocumentFragment, HTMLCollection, NodeList) || Array.isArray(nodes);
-        const list = isList ? (nodes.childNodes ? Array.from(nodes.childNodes) : Array.from(nodes)) : [nodes];
-        const key = pos.toString().toLowerCase();
-
-        const alias = { before: 'beforebegin', prepend: 'afterbegin', append: 'beforeend', after: 'afterend', inside: 'innerhtml', replace: 'outerhtml' };
-        const mode = alias[key] || key;
-
-        if (mode === 'innerhtml') target.innerHTML = '';
-
-        const parent = target.parentNode;
-        const ops = {
-            beforebegin: n => parent.insertBefore(n, target),
-            afterbegin: n => target.insertBefore(n, target.firstChild),
-            beforeend: n => target.appendChild(n),
-            afterend: n => parent.insertBefore(n, target.nextSibling),
-            innerhtml: n => target.appendChild(n),
-            outerhtml: n => parent.insertBefore(n, target)
-        };
-
-        const op = ops[mode] || ops.beforeend;
-        if (mode === 'afterbegin') list.reverse();
-        for (const n of list) op(n);
-        if (mode === 'outerhtml') target.remove();
-
-        return nodes;
-    };
-
-    const findSibling = (element, selector, forward) => {
-        if (!selector) return forward ? element.nextElementSibling : element.previousElementSibling;
-        if (is(selector, Element)) return selector;
-
-        if (is(selector, NodeList) || Array.isArray(selector)) {
-            const mask = forward ? 4 : 2;
-            if (forward) {
-                for (const n of selector)
-                    if (element.compareDocumentPosition(n) & mask) return n;
-            } else {
-                for (let i = selector.length - 1; i >= 0; i--)
-                    if (element.compareDocumentPosition(selector[i]) & mask) return selector[i];
-            }
-            return null;
-        }
-
-        const s = typeof selector === 'string' ? selector : selector.toString();
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
-        walker.currentNode = element;
-        let node;
-        while (node = forward ? walker.nextNode() : walker.previousNode()) {
-            if (node.matches(s)) return node;
-        }
-        return null;
-    };
-
-    Library.Element = {
-        matches(selector) {
-            return this.matches(selector.toString());
-        },
-
-        hide() {
-            this.style.display = 'none';
-        },
-
-        show() {
-            this.style.display = '';
-        },
-
-        transition(...args) {
-            let css = '', wait = 0, style = {}, og = this.style.transition;
-            while (args.length) {
-                let duration = 0, time = '', delay = 0, prop = args.shift().toString();
-                const next = () => args.shift().toString();
-                const handlers = {
-                    from: () => this.style[prop] = next(), 
-                    to: () => style[prop] = next(),
-                    in: () => duration = Library.globals.time_to_ms(next()), 
-                    using: () => time = next(),
-                    after: () => delay = Library.globals.time_to_ms(next())
-                };
-                while (args.length && handlers[args[0]]) handlers[args.shift()]();
-
-                wait = Math.max(wait, delay + duration);
-                css += `${css ? ', ' : ''}${prop} ${duration}ms${time ? ' ' + time : ''}${delay ? ' ' + delay + 'ms' : ''}`;
-            }
-            this.style.transition = css;
-            Object.assign(this.style, style);
-            return new Promise(r => setTimeout(() => { this.style.transition = og; r(); }, wait));
-        },
-
-        trigger(e, bubbles = true, detail = {}) {
-            this.dispatchEvent(new CustomEvent(Binder.eventName(e), { bubbles, detail: unwrap(detail) }));
-            return this;
-        },
-
-        move_to(element, position = 'beforeend') {
-            return moveContent(this, element, position);
-        },
-
-        empty() {
-            this.replaceChildren();
-        },
-
-        clone() {
-            return this.cloneNode(true);
-        },
-
-        prepend(c) {
-            return insertContent(this, c, 'afterbegin');
-        },
-
-        append(c) {
-            return insertContent(this, c, 'beforeend');
-        },
-
-        fade(inout, time = 250, timing = 'linear') {
-            return this.animate(
-                [{ opacity: inout === 'in' ? 0 : 1 }, { opacity: inout === 'in' ? 1 : 0 }],
-                { duration: Library.globals.time_to_ms(time), easing: timing, fill: 'forwards' }
-            ).finished.then(() => {
-                this.style.opacity = inout === 'in' ? '1' : '0';
-            });
-        },
-
-        is_in_view(partially = false) {
-            const { top, left, bottom, right } = this.getBoundingClientRect();
-            const { innerHeight: h, innerWidth: w } = window;
-            const full = top >= 0 && left >= 0 && bottom <= h && right <= w;
-            return (full || !partially) ? full : ((top < h && bottom > 0 && left < w && right > 0) ? 'partially' : false);
-        },
-
-        next(s) {
-            return findSibling(this, s, true);
-        },
-
-        previous(s) {
-            return findSibling(this, s, false);
-        },
-
-        parent() {
-            return this.parentNode;
-        },
-
-        take(value, parent = this.parentNode) {
-            const { isClass, isAttribute, name } = classifyValue(value);
-
-            if (isClass) {
-                for (const elt of unwrap(parent).querySelectorAll('.' + name)) {
-                    elt.classList.remove(name);
-                }
-
-                this.classList.add(name);
-            } else if (isAttribute) {
-                let attributeValue = '';
-                for (const elt of unwrap(parent).querySelectorAll(`[${name}]`)) {
-                    attributeValue = elt.getAttribute(name);
-                    elt.removeAttribute(name);
-                }
-
-                this.setAttribute(name, attributeValue);
-            } else {
-                throw new ActError('Invalid value');
-            }
-
-            return this;
-        },
-
-        toggle(value, force) {
-            if (value === undefined) {
-                return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
-            }
-
-            const { isClass, isAttribute, name } = classifyValue(value);
-            const solvedForce = force !== undefined ? unwrap(force) : undefined;
-
-            if (isClass) return this.classList.toggle(name, solvedForce);
-            if (isAttribute) return this.toggleAttribute(name, solvedForce);
-            if (solvedForce !== undefined) return solvedForce ? Library.Element.show.call(this) : Library.Element.hide.call(this);
-            return (this.style.display === 'none') ? Library.Element.show.call(this) : Library.Element.hide.call(this);
-        },
-
-        add(...args) {
-            for (const value of args) {
-                const { isClass, isAttribute, name } = classifyValue(value);
-                if (isClass) this.classList.add(name);
-                else if (isAttribute) this.setAttribute(name, '');
-            }
-            return this;
-        },
-
-        has(value) {
-            const { isClass, isAttribute, name } = classifyValue(value);
-            if (isClass) return this.classList.contains(name);
-            if (isAttribute) return this.hasAttribute(name);
-            return this.matches(name);
-        },
-
-        remove(...args) {
-            if (args.length === 0) return this.parentNode?.removeChild(this);
-
-            for (const value of args) {
-                const { isClass, isAttribute, name } = classifyValue(value);
-                if (isClass) this.classList.remove(name);
-                else if (isAttribute) this.removeAttribute(name);
-            }
-            return this;
-        },
-    };
-
-    Library.object = {
-        move_to(el, pos) {
-            return moveContent(this, el, pos);
-        },
-    };
-
-    Library.string = {
-        after(str) {
-            const [self, s] = [this.toString(), str.toString()];
-            const i = self.indexOf(s);
-            return i === -1 ? self : self.substring(i + s.length);
-        },
-
-        before(str) {
-            const [self, s] = [this.toString(), str.toString()];
-            const i = self.indexOf(s);
-            return i === -1 ? self : self.substring(0, i);
-        },
-
-        between(start, end) {
-            const [self, s, e] = [this.toString(), start.toString(), end.toString()];
-            const i = self.indexOf(s);
-            return i === -1 ? self : self.substring(i + s.length, self.indexOf(e));
-        },
-
-        capitalize() { 
-            return this.toString().charAt(0).toUpperCase() + this.toString().slice(1); 
-        },
-    };
-
-    for (const t of ['function', 'boolean', 'number', 'bigint', 'symbol', 'undefined']) Library[t] = {};
-
-    // RESULTS
+    const isNullish = (value) => value === null || value === undefined;
+
+    class BaseError extends Error { }
+    class ActError extends BaseError { }
+    class ActSyntaxError extends ActError { }
+    class ActRuntimeError extends ActError { }
+
+    class Signal extends BaseError {
+        static Break = class extends this { };
+        static Continue = class extends this { };
+        static Stop = class extends this { };
+        static Halt = class extends this { };
+        static Repeat = class extends this { };
+        static Restart = class extends this { };
+        static Return = class extends this { };
+    }
 
     class Result {
         from;
@@ -833,11 +68,11 @@
         constructor(value, from = null, props = {}) {
             this._value = value;
             this.from = from;
-            for (const [k, v] of Object.entries(props)) this[k] = v;
+            for (const [key, value] of Object.entries(props)) this[key] = value;
         }
 
-        get settable() { 
-            return this.parent && this.key !== undefined; 
+        get settable() {
+            return this.parent && this.key !== undefined;
         }
 
         set(value) {
@@ -868,22 +103,27 @@
 
     class AttributeResult extends Result {
         set(value) {
-            const str = is(value, Result) ? value.toString() : String(value);
-            this.parent.setAttribute(this.key, str);
+            const text = is(value, Result) ? value.toString() : String(value);
+            this.parent.setAttribute(this.key, text);
         }
 
-        get value() { return this.parent.getAttribute(this.key); }
+        get value() {
+            return this.parent.getAttribute(this.key);
+        }
     }
 
-    class ComplexResult extends Result { };
+    class ComplexResult extends Result { }
 
     class DimensionResult extends ComplexResult {
+        get number() { return this.value.number; }
+        get unit() { return this.value.unit; }
+
         valueOf() {
-            return this.value.number.valueOf();
+            return this.number.valueOf();
         }
 
         toString() {
-            return Object.values(this.value).join('');
+            return `${this.number}${this.unit}`;
         }
     }
 
@@ -908,23 +148,30 @@
         }
     }
 
-    // ERRORS & SIGNALS
-
-    class BaseError extends Error { }
-    class ActError extends BaseError { }
-    class ActSyntaxError extends ActError { }
-    class ActRuntimeError extends ActError { }
-    class Signal extends BaseError {
-        static Break = class extends this { };
-        static Continue = class extends this { };
-        static Stop = class extends this { };
-        static Halt = class extends this { };
-        static Repeat = class extends this { };
-        static Restart = class extends this { };
-        static Return = class extends this { };
+    class Abortable {
+        constructor(value, abort) {
+            this.value = value;
+            this.abort = abort ?? (() => {});
+        }
     }
 
-    // BASE CLASSES
+    const abortable = ({ perform, abort }) => {
+        let done;
+        const promise = new Promise(resolve => { done = resolve; });
+        const returned = perform(done);
+        if (!isNullish(returned) && typeof returned.then === 'function') returned.then(done);
+
+        return new Abortable(promise, abort ?? (() => {}));
+    };
+
+    const resolveAbortable = async (ctx, returned) => {
+        if (is(returned, Abortable)) {
+            ctx.abortSignal.addEventListener('abort', returned.abort, { once: true });
+            return await returned.value;
+        }
+
+        return await returned;
+    };
 
     class Solvable {
         scope;
@@ -937,17 +184,18 @@
             this.scope = scope;
             this.source = source;
             for (const [key, value] of Object.entries(props)) if (value !== undefined) this[key] = value;
+
             if (Act.config.debug) console.log(
                 `Act debug. ${this.constructor.name} created.\n`, this, '\n',
             );
         }
 
-        get code() { 
-            return this.source.code.substring(this.tokenStart.index, this.tokenEnd.indexEnd); 
+        get code() {
+            return this.source.code.substring(this.tokenStart.index, this.tokenEnd.indexEnd);
         }
 
-        solve() { 
-            return this.value; 
+        solve() {
+            return this.value;
         }
 
         solveDebug(ctx, target, result) {
@@ -970,11 +218,11 @@
         expand() {
             const result = [];
 
-            for (let value of this.value) {
-                if (is(value, this.constructor)) {
-                    result.push(...value.expand());
+            for (const item of this.value) {
+                if (is(item, this.constructor)) {
+                    result.push(...item.expand());
                 } else {
-                    result.push(value);
+                    result.push(item);
                 }
             }
 
@@ -984,11 +232,11 @@
         async solve(ctx, target, opts) {
             const result = [];
 
-            for (let value of this.expand()) {
-                if (is(value, Solvable)) {
-                    result.push(await ctx.solve(value, target, opts));
+            for (const item of this.expand()) {
+                if (is(item, Solvable)) {
+                    result.push(await ctx.solve(item, target, opts));
                 } else {
-                    result.push(value);
+                    result.push(item);
                 }
             }
 
@@ -1008,50 +256,19 @@
     }
 
     class Template extends Solvable {
-        static interpolation(index) {
-            return `\uE000_act_itpl_:${index}\uE000`;
-        }
-
         async solve(ctx, target, opts) {
-            if (!this.value.scope) return this.value.template;
-            let result, skipStack = [], template = this.value.template;
+            const { literals, scope } = this.value;
+            if (!scope) return literals[0];
 
-            for (let i = 0; i < this.value.scope.value.length; i++) {
-                result = '';
-                if (skipStack.shift()) {
-                    template = template.replace(Template.interpolation(i), '');
-                    continue;
-                }
+            const rendered = [];
+            await scope.solve(ctx, target, opts, (index, value) => rendered[index] = value?.toString() ?? '');
 
-                const sentence = this.value.scope.value[i];
-
-                try {
-                    if (sentence.mode == 'async') {
-                        result = sentence.solve(ctx, target, opts);
-                    } else {
-                        result = await sentence.solve(ctx, target, opts);
-                    }
-
-                    if (sentence.mode == 'condition') {
-                        skipStack = [
-                            !unwrap(result),
-                            (this.value[i + 1]?.mode == 'branch') && !!unwrap(result),
-                        ];
-                    } else if (sentence.mode == 'fwd') {
-                        target = unwrap(result);
-                    }
-                } catch (e) {
-                    if (is(e, Signal.Stop)) { return e.data; } else if (is(e, Signal.Repeat)) {
-                        i = -1;
-                    } else {
-                        throw e;
-                    }
-                } finally {
-                    template = template.replace(Template.interpolation(i), result.toString());
-                }
+            let text = literals[0];
+            for (let index = 0; index < scope.value.length; index++) {
+                text += (rendered[index] ?? '') + literals[index + 1];
             }
 
-            return template;
+            return text;
         }
     }
 
@@ -1059,11 +276,16 @@
         solve() {
             return this.value;
         }
+
+        toString() {
+            return this.value.toString();
+        }
     }
 
     class ActString extends Literal { }
     class ActNumber extends Literal { }
     class ActURL extends Literal { }
+
     class Dimension extends Solvable {
         static REGEX = /^(-)?\d+(\.\d+)?[a-z%]+$/;
 
@@ -1092,8 +314,6 @@
         }
     }
 
-    // SELECTORS & PROPERTIES
-
     class Property extends Solvable {
         solve(ctx, target) {
             let key = this.value;
@@ -1113,16 +333,13 @@
 
     class Variable extends Solvable {
         isGlobal() {
-            return (this.value[0] === this.value[0].toUpperCase() && this.value[0] !== this.value[0].toLowerCase());
+            return /^[A-Z]/.test(this.value);
         }
 
         solve(ctx, target) {
             if (this.isGlobal()) {
-                return new Result(
-                    Binder.from(document.body).data[this.value],
-                    this,
-                    { parent: Binder.from(document.body).data, key: this.value },
-                );
+                const globals = Binder.from(document.body).data;
+                return new Result(globals[this.value], this, { parent: globals, key: this.value });
             }
 
             let result = this.scope.lookup(ctx, this.value);
@@ -1145,24 +362,12 @@
     }
 
     class CSSProperty extends Solvable {
-        solve(ctx, target, opts) {
+        solve(ctx, target) {
             const value = getComputedStyle(target)[this.value];
-            const dimension = value.match(Dimension.REGEX);
+            const asDimension = value?.match?.(Dimension.REGEX) &&
+                new DimensionResult({ number: parseFloat(value), unit: value.match(/[a-z%]+$/)[0] }, this);
 
-            if (dimension && dimension.length && dimension[0] !== undefined) {
-                const dimensionResult = new Dimension(
-                    this.scope,
-                    this.source,
-                    { value: dimension[0], tokenStart: this.tokenStart, tokenEnd: this.tokenEnd }
-                );
-                return new Result(
-                    dimensionResult.solve(ctx, target, opts),
-                    this,
-                    { parent: target.style, key: this.value }
-                );
-            }
-
-            return new Result(value, this, { parent: target.style, key: this.value });
+            return new Result(asDimension || value, this, { parent: target.style, key: this.value });
         }
     }
 
@@ -1174,17 +379,18 @@
 
     class SelectorTemplate extends Solvable {
         async solve(ctx, target, opts) {
-            let selector = await ctx.asString(this.value), selectorTarget = (opts?.selectorTarget || document);
+            let selector = await ctx.asString(this.value);
+            let searchRoot = opts?.selectorTarget || document;
 
             if (selector.startsWith('> ')) {
-                selectorTarget = target;
+                searchRoot = target;
                 selector = selector.slice(2);
             } else if (selector.startsWith('< ')) {
-                selectorTarget = is(target, Element) ? target : ctx.target;
-                return new SelectorResult(selector.slice(2), this, { parent: selectorTarget, mode: 'closest' });
+                searchRoot = is(target, Element) ? target : ctx.target;
+                return new SelectorResult(selector.slice(2), this, { parent: searchRoot, mode: 'closest' });
             }
 
-            return new SelectorResult(selector, this, { parent: selectorTarget });
+            return new SelectorResult(selector, this, { parent: searchRoot });
         }
     }
 
@@ -1203,7 +409,15 @@
     }
 
     class Sentence extends Solvable {
-        mode = 'sync';
+        static MODE = {
+            SYNC: 'sync',
+            ASYNC: 'async',
+            CONDITION: 'condition',
+            BRANCH: 'branch',
+            FORWARD: 'fwd',
+        };
+
+        mode = Sentence.MODE.SYNC;
         target;
 
         async solve(ctx, target, opts) {
@@ -1217,25 +431,25 @@
                 }
 
                 result = await this.value.solve(ctx, unwrap(sentenceTarget), opts);
-            } catch (e) {
-                if (is(e, Signal)) throw e;
+            } catch (error) {
+                if (is(error, Signal)) throw error;
 
-                if (!is(e, ActRuntimeError)) {
-                    const wrapped = new ActRuntimeError(e.message);
-                    wrapped.actException = e;
+                if (!is(error, ActRuntimeError)) {
+                    const wrapped = new ActRuntimeError(error.message);
+                    wrapped.actException = error;
                     wrapped.actTrace = [];
-                    e = wrapped;
+                    error = wrapped;
                 }
 
-                e.actTrace = e.actTrace || [];
-                e.actTrace.push({
+                error.actTrace = error.actTrace || [];
+                error.actTrace.push({
                     sentence: this,
                     sentenceTarget,
                     target,
                     context: ctx,
                 });
 
-                throw e;
+                throw error;
             }
 
             if (Act.config.debug) this.solveDebug(ctx, target, result);
@@ -1243,40 +457,54 @@
         }
     }
 
+    const withoutAwaiting = (pendingResult) => pendingResult;
+
     class Scope extends Solvable {
         value = [];
 
-        isRoot() { return !is(this.scope, Scope); }
+        isRoot() {
+            return !is(this.scope, Scope);
+        }
 
-        async solve(ctx, target, opts) {
+        async solve(ctx, target, opts, onResult = null) {
             let result, skipStack = [];
 
             for (let i = 0; i < this.value.length; i++) {
-                if (skipStack.shift()) continue;
+                if (ctx.finishing) throw new Signal.Halt;
+
+                if (skipStack.shift()) {
+                    onResult?.(i, '');
+                    continue;
+                }
+
                 const sentence = this.value[i];
 
                 try {
-                    if (sentence.mode == 'async') {
-                        result = sentence.solve(ctx, target, opts);
+                    if (sentence.mode === Sentence.MODE.ASYNC) {
+                        result = withoutAwaiting(sentence.solve(ctx, target, opts));
                     } else {
                         result = await sentence.solve(ctx, target, opts);
                     }
 
-                    if (sentence.mode == 'condition') {
-                        skipStack = [
-                            !unwrap(result),
-                            (this.value[i + 1]?.mode == 'branch') && !!unwrap(result),
-                        ];
-                    } else if (sentence.mode == 'fwd') {
+                    if (sentence.mode === Sentence.MODE.CONDITION) {
+                        const conditionHolds = !!unwrap(result);
+                        const nextSentenceIsElseBranch = this.value[i + 1]?.mode === Sentence.MODE.BRANCH;
+                        skipStack = [!conditionHolds, nextSentenceIsElseBranch && conditionHolds];
+                        onResult?.(i, '');
+                    } else if (sentence.mode === Sentence.MODE.FORWARD) {
                         target = result;
+                        onResult?.(i, result);
+                    } else {
+                        onResult?.(i, result);
                     }
-                } catch (e) {
-                    if (is(e, Signal.Stop)) { 
-                        return e.data; 
-                    } else if (is(e, Signal.Repeat) || (this.isRoot() && is(e, Signal.Restart))) {
+                } catch (error) {
+                    if (is(error, Signal.Stop)) {
+                        onResult?.(i, error.data);
+                        return error.data;
+                    } else if (is(error, Signal.Repeat) || (this.isRoot() && is(error, Signal.Restart))) {
                         i = -1;
                     } else {
-                        throw e;
+                        throw error;
                     }
                 }
             }
@@ -1287,14 +515,15 @@
 
         lookup(ctx, key, defaultThisScope = false) {
             let scope = this;
+
             while (scope) {
                 const scopeData = ctx.scopeData(scope);
-                if (scopeData[key] !== undefined) { 
-                    return new Result(scopeData[key], scope, { parent: scopeData, key }); 
+                if (scopeData[key] !== undefined) {
+                    return new Result(scopeData[key], scope, { parent: scopeData, key });
                 }
 
-                if (is(scopeData.__fromScope__, this.constructor)) {
-                    scope = scopeData.__fromScope__;
+                if (is(scopeData.__callerScope__, this.constructor)) {
+                    scope = scopeData.__callerScope__;
                 } else {
                     scope = scope.scope;
                 }
@@ -1308,11 +537,11 @@
         async solve(ctx, target, opts) {
             const result = [];
 
-            for (const i of this.value) {
-                if (is(i, Spread)) {
-                    result.push(...await ctx.solve(i, target, opts));
+            for (const item of this.value) {
+                if (is(item, Spread)) {
+                    result.push(...await ctx.solve(item, target, opts));
                 } else {
-                    result.push(await ctx.solve(i, target, opts));
+                    result.push(await ctx.solve(item, target, opts));
                 }
             }
 
@@ -1325,8 +554,8 @@
             const object = {};
 
             for (const [key, value] of this.value) {
-                const strKey = await ctx.asString(key, target);
-                object[strKey] = await ctx.solve(value, target, { ...opts, parent: object, key: strKey });
+                const stringKey = await ctx.asString(key, target);
+                object[stringKey] = await ctx.solve(value, target, { ...opts, parent: object, key: stringKey });
             }
 
             return object;
@@ -1334,46 +563,55 @@
     }
 
     class ActFunction extends Solvable {
-        async solve(c, t, opts) {
-            const scope = this.value.scope, args = this.value.args;
+        async solve(outerCtx, outerTarget, opts) {
+            const scope = this.value.scope;
+            const parameterNames = this.value.args;
 
-            return Library.method(async function (ctx, target, optsCall, ...callArgs) {
-                const fctx = ctx.spawn(), scopeData = fctx.scopeData(scope);
-                scopeData.event = fctx.event;
+            return Library.method(async function (ctx, target, callOpts, ...callArgs) {
+                const fnContext = ctx.spawn(), scopeData = fnContext.scopeData(scope);
+                scopeData.event = fnContext.event;
                 scopeData.this = opts?.parent;
 
-                const expandedArgs = await ctx.solveAll(callArgs, target, opts);
-                for (let i = 0; i < args.length; i++) {
-                    if (Array.isArray(args[i])) {
-                        scopeData[args[i][0]] = unwrapAll(expandedArgs.slice(i));
+                const solvedArgs = await ctx.solveAll(callArgs, target, opts);
+                for (let i = 0; i < parameterNames.length; i++) {
+                    if (Array.isArray(parameterNames[i])) {
+                        scopeData[parameterNames[i][0]] = unwrapAll(solvedArgs.slice(i));
                         break;
                     }
 
-                    scopeData[args[i]] = expandedArgs[i];
+                    scopeData[parameterNames[i]] = solvedArgs[i];
                 }
 
                 try {
-                    return await fctx.solve(scope, target, opts);
-                } catch (e) {
-                    if (is(e, Signal.Return)) return e.data;
-                    throw e;
+                    return await fnContext.solve(scope, target, opts);
+                } catch (error) {
+                    if (is(error, Signal.Return)) return error.data;
+                    throw error;
                 }
             });
         }
     }
 
-    // EXPRESSIONS
+    const looselyEquals = (value, other) => value == other;
 
     class Expression extends Solvable {
         async prepare(ctx, target, opts) {
-            const l = await ctx.solve(this.l, target, opts);
-            const r = await ctx.solve(this.r, target, opts);
-            return { l, r };
+            return {
+                left: await ctx.solve(this.left, target, opts),
+                right: await ctx.solve(this.right, target, opts)
+            };
+        }
+
+        async invokeLeft(ctx, target, opts) {
+            const left = await ctx.solve(this.left, target, opts);
+            const key = lookup(unwrap(left), target);
+            const invoked = await tryInvoke(ctx, target, opts, left, this.right.expand(), key);
+            return { left, key, invoked };
         }
 
         async performWith(ctx, target, opts, fn) {
-            const { l, r } = await this.prepare(ctx, target, opts);
-            return fn(l, r);
+            const { left, right } = await this.prepare(ctx, target, opts);
+            return fn(left, right);
         }
 
         async solve(ctx, target, opts) {
@@ -1381,15 +619,15 @@
 
             try {
                 result = await this.perform(ctx, target, opts);
-            } catch (e) {
-                if (is(e, Signal)) throw e;
-                if (is(e, ActRuntimeError)) throw e;
+            } catch (error) {
+                if (is(error, Signal)) throw error;
+                if (is(error, ActRuntimeError)) throw error;
 
-                const error = new ActRuntimeError;
-                error.expression = this;
-                error.actException = e;
-                error.actTrace = [];
-                throw error;
+                const wrapped = new ActRuntimeError;
+                wrapped.expression = this;
+                wrapped.actException = error;
+                wrapped.actTrace = [];
+                throw wrapped;
             }
 
             if (Act.config.debug) this.solveDebug(ctx, target, result);
@@ -1399,7 +637,9 @@
 
     class KeywordExpression extends Expression {
         async perform(ctx, target, opts) {
-            const keyword = this.l.value.toString(), args = this.r.expand();
+            const keyword = this.left.value.toString();
+            const args = this.right.expand();
+
             return await ctx.solve(
                 await Library.keywords[keyword].call(this, ctx, target, opts, args),
                 target,
@@ -1409,288 +649,313 @@
 
     class PrefixExpression extends Expression {
         async perform(ctx, target, opts) {
-            const prefix = this.l.toString();
+            const prefix = this.left.toString();
+
             return await ctx.solve(
-                await Library.prefixes[prefix].call(this, ctx, target, opts, this.r),
+                await Library.prefixes[prefix].call(this, ctx, target, opts, this.right),
                 target,
             );
         }
     }
 
-    async function resolveAndCallFunction(ctx, target, opts, l, r, key) {
-        if (isActFunction(unwrap(l))) {
-            return { solved: true, result: await unwrap(l)(ctx, l.parent ?? target, opts, ...r) };
-        } else if (is(unwrap(l), Function)) {
-            const solvedR = await ctx.solveAll(r, target, opts);
-            const args = solvedR.map(arg => isActFunction(unwrap(arg))
-                ? (...a) => unwrap(arg)(ctx, target, opts, ...a)
-                : unwrap(arg)
-            );
-            return { solved: true, result: await unwrap(l).call(l.parent ?? target, ...args) };
-        } else if (typeof unwrap(l) === 'string') {
-            const fn = Library.get(key, target);
-            if (fn !== undefined) return { solved: true, result: await Library.exec(fn, r, target, ctx, opts) };
+    const NOT_INVOCABLE = Symbol('notInvocable');
 
-            const host = [target, unwrap(target), window].find(obj => is(obj?.[key], Function));
-            if (host !== undefined) {
-                const solvedR = await ctx.solveAll(r, target, opts);
-                return { solved: true, result: await host[key](...unwrapAll(solvedR)) };
-            }
-        } else if (is(l, SelectorResult) && unwrap(l).length > 0) {
-            return { solved: true, result: unwrap(l)[0] };
+    async function tryInvoke(ctx, target, opts, left, rawArgs, key) {
+        const value = unwrap(left);
+        const receiver = left?.parent ?? target;
+
+        const isActLambda = isActFunction(value);
+        const isJavaScriptFunction = is(value, Function);
+        const isMethodName = is(value, 'string');
+        const isCallableDomReference = is(left, SelectorResult) && value.length > 0;
+
+        if (isActLambda) {
+            const heldInAVariable = is(from(left), Variable);
+            return await value(ctx, heldInAVariable ? target : receiver, opts, ...rawArgs);
         }
 
-        return { solved: false, result: null };
+        if (isJavaScriptFunction) {
+            const asJavaScriptCallback = (actLambda) =>
+                (...callArgs) => unwrap(actLambda)(ctx, target, opts, ...callArgs);
+
+            const solved = await ctx.solveAll(rawArgs, target, opts);
+            const args = solved.map(arg => isActFunction(unwrap(arg)) ? asJavaScriptCallback(arg) : unwrap(arg));
+
+            return await resolveAbortable(ctx, value.call(receiver, ...args));
+        }
+
+        if (isMethodName) {
+            const libraryMethod = Library.get(key, target);
+            if (libraryMethod !== undefined) return await Library.exec(libraryMethod, rawArgs, target, ctx, opts);
+
+            const hostsSearchedInOrder = [target, unwrap(target), window];
+            const host = hostsSearchedInOrder.find(object => is(object?.[key], Function));
+
+            if (host !== undefined) {
+                const args = await ctx.solveAll(rawArgs, target, opts);
+                return await host[key](...unwrapAll(args));
+            }
+        }
+
+        if (isCallableDomReference) return value[0];
+
+        return NOT_INVOCABLE;
     }
 
     class ActExpression extends Expression {
         async perform(ctx, target, opts) {
-            const l = await ctx.solve(this.l, target, opts), r = this.r.expand();
-            const key = lookup(unwrap(l), target);
+            const { left, key, invoked } = await this.invokeLeft(ctx, target, opts);
+            if (invoked !== NOT_INVOCABLE) return invoked;
 
-            const { solved, result } = await resolveAndCallFunction(ctx, target, opts, l, r, key);
-            if (solved) return result;
+            const solvedRight = await ctx.solveAll(this.right, target, opts);
 
-            const solvedR = await ctx.solveAll(this.r, target, opts);
-            if (l?.settable) {
-                if (is(l.through.from, CSSProperty)) return l.set(solvedR.join(' '));
-                return l.set(solvedR[0]);
+            if (left?.settable) {
+                if (is(left.through.from, CSSProperty)) return left.set(solvedRight.join(' '));
+                return left.set(solvedRight[0]);
             } else {
-                return target[key] = unwrap(solvedR[0]);
+                return target[key] = unwrap(solvedRight[0]);
             }
         }
     }
 
     class CallExpression extends Expression {
         async perform(ctx, target, opts) {
-            const l = await ctx.solve(this.l, target, opts), r = this.r.expand();
-            const key = lookup(unwrap(l), target);
-            const { solved, result } = await resolveAndCallFunction(ctx, target, opts, l, r, key);
-            if (solved) return result;
+            const { left, invoked } = await this.invokeLeft(ctx, target, opts);
+            if (invoked !== NOT_INVOCABLE) return invoked;
 
-            throw new ActError(`Cannot call '${l.toString()}': not a function or callable object.`);
+            throw new ActError(`Cannot call '${left.toString()}': not a function or callable object.`);
         }
     }
 
     class SetExpression extends Expression {
         async perform(ctx, target, opts) {
-            const { l, r } = await this.prepare(ctx, target, opts);
+            const { left, right } = await this.prepare(ctx, target, opts);
 
-            if (l?.settable) {
-                if (is(from(l), CSSProperty)) return l.set(r.join(' '));
-                return l.set(r);
+            if (left?.settable) {
+                if (is(from(left), CSSProperty)) return left.set(right.join(' '));
+                return left.set(right);
             } else {
-                let key = l.toString();
+                let key = left.toString();
                 if (Act.config.convertToCamelCase) key = snakeToCamel(key);
-                target[key] = unwrap(r);
-                return unwrap(r);
+                target[key] = unwrap(right);
+                return unwrap(right);
             }
         }
     }
 
     class AtExpression extends Expression {
         async perform(ctx, target, opts) {
-            let l;
+            let current;
 
-            if (is(this.l, Word) && !this.l.isReservedWord() && lookup(this.l.value, target) !== undefined) {
-                l = target[lookup(this.l.value, target)];
+            if (is(this.left, Word) && !this.left.isReservedWord()) {
+                const host = [target, window].find(candidate => !isNullish(candidate) && candidate[lookup(this.left.value, candidate)] !== undefined);
+                current = host ? host[lookup(this.left.value, host)] : await ctx.solve(this.left, target, opts);
             } else {
-                l = await ctx.solve(this.l, target, opts);
+                current = await ctx.solve(this.left, target, opts);
             }
 
-            let r = await ctx.solveAll(this.r, unwrap(l), opts);
+            const keys = await ctx.solveAll(this.right, unwrap(current), opts);
 
-            for (let key of r) {
+            for (let key of keys) {
                 key = await ctx.solve(key, target, opts);
-                const lResolved = is(unwrap(l), SelectorResult) ? unwrap(l).value : unwrap(l);
-                if (is(lResolved, Element)) {
+
+                const element = is(unwrap(current), SelectorResult) ? unwrap(current).value : unwrap(current);
+                if (is(element, Element)) {
                     if (is(from(key), Attribute, CSSProperty)) {
-                        l = await from(key).solve(ctx, lResolved, opts);
+                        current = await from(key).solve(ctx, element, opts);
                         continue;
                     } else if (is(from(key), Variable)) {
-                        l = new Result(
-                            Binder.from(lResolved).data[from(key).value],
-                            this,
-                            { parent: Binder.from(lResolved).data, key: from(key).value },
-                        );
+                        const data = Binder.from(element).data;
+                        current = new Result(data[from(key).value], this, { parent: data, key: from(key).value });
                         continue;
                     }
                 }
 
-                l = unwrap(l);
-                if (is(l, SelectorResult)) l = l.value;
+                current = unwrap(current);
+                if (is(current, SelectorResult)) current = current.value;
+
                 const keyValue = unwrap(key);
-                if (l === null || l === undefined) throw new ActError(`Cannot resolve member '${keyValue}' of ${l}.`);
-                const libFn = Library.get(keyValue, l);
-                if (libFn !== undefined) {
-                    l = new Result(libFn, this, { parent: l });
+                if (current === null || current === undefined) {
+                    if (this.safe) return new Result(undefined, this, {});
+                    throw new ActError(`Cannot resolve member '${keyValue}' of ${current}.`);
+                }
+
+                const libraryMethod = Library.get(keyValue, current);
+                if (libraryMethod !== undefined) {
+                    current = new Result(libraryMethod, this, { parent: current });
                 } else {
-                    const resolvedKey = l[keyValue] !== undefined ? keyValue : lookup(keyValue, l);
-                    l = new Result(l[resolvedKey], this, { parent: l, key: resolvedKey });
+                    const resolvedKey = current[keyValue] !== undefined ? keyValue : lookup(keyValue, current);
+                    current = new Result(current[resolvedKey], this, { parent: current, key: resolvedKey });
                 }
             }
 
-            return l;
+            return current;
         }
     }
 
     class SubscriptExpression extends Expression {
         async perform(ctx, target, opts) {
-            let { l, r } = await this.prepare(ctx, target, opts);
-            l = unwrap(l);
+            let { left, right } = await this.prepare(ctx, target, opts);
+            let current = unwrap(left);
 
-            for (let index of r) {
+            for (let index of right) {
                 index = await ctx.asString(index, target);
-                l = new Result(l[index], this, { parent: l, key: index });
+                current = new Result(current[index], this, { parent: current, key: index });
             }
 
-            return l;
+            return current;
         }
     }
 
     class InsertExpression extends Expression {
         async perform(ctx, target, opts) {
-            let { l, r } = await this.prepare(ctx, target, opts);
-            l = l ?? target ?? ctx.target;
+            let { left, right } = await this.prepare(ctx, target, opts);
+            left = left ?? target ?? ctx.target;
 
-            if (is(unwrap(l), Element)) {
-                if (is(unwrap(r), Element)) r = unwrap(r).innerHTML;
-                return unwrap(l).innerHTML = r?.toString() ?? '';
-            } else if (is(unwrap(l), NodeList)) {
-                return unwrap(l)[0].innerHTML = r?.toString() ?? '';
-            } else if (Array.isArray(unwrap(l))) {
-                return unwrap(l).push(unwrap(r));
+            if (is(unwrap(left), Element)) {
+                if (is(unwrap(right), Element)) right = unwrap(right).innerHTML;
+                return unwrap(left).innerHTML = right?.toString() ?? '';
+            } else if (Array.isArray(unwrap(left))) {
+                return unwrap(left).push(unwrap(right));
             }
 
-            throw new ActError(`Cannot insert into target of type '${typeof unwrap(l)}'. Expected Element, NodeList, or Array.`);
+            const type = unwrap(left)?.constructor?.name ?? typeof unwrap(left);
+            throw new ActError(`Cannot insert into target of type '${type}'. Expected a single Element or an Array — select one element from a collection with '!' or 'first'.`);
         }
     }
 
     class IsTypeOperation extends Expression {
+        static CHECKS = {
+            float: (value) => typeof value === 'number' && !Number.isNaN(value),
+            int: (value) => typeof value === 'number' && Number.isInteger(value),
+            integer: (value) => typeof value === 'number' && Number.isInteger(value),
+            string: (value) => typeof value === 'string',
+            boolean: (value) => typeof value === 'boolean',
+            object: (value) => typeof value === 'object',
+            array: (value) => Array.isArray(value),
+        };
+
         async perform(ctx, target, opts) {
-            let { l, r } = await this.prepare(ctx, target, opts);
-            const unwrapped = unwrap(l), type = r.toString();
+            const { left, right } = await this.prepare(ctx, target, opts);
+            const value = unwrap(left), type = right.toString();
 
-            if (is(unwrapped, Element)) {
-                if (is(from(r), Tag)) return unwrapped.tagName.toLowerCase() === from(r).value.toLowerCase();
-                return unwrapped.tagName.toLowerCase() === type.toLowerCase();
+            if (value === null || value === undefined) return false;
+
+            if (is(value, Element)) {
+                if (type.toLowerCase() === 'element') return true;
+                const tag = is(from(right), Tag) ? from(right).value : type;
+                return value.tagName.toLowerCase() === tag.toLowerCase();
             }
 
-            switch (type) {
-                case 'float':
-                    return typeof unwrapped === 'number' && !Number.isNaN(unwrapped);
-                case 'integer':
-                case 'int':
-                    return typeof unwrapped === 'number' && Number.isInteger(unwrapped);
-                case 'string':
-                    return typeof unwrapped === 'string';
-                case 'boolean':
-                    return typeof unwrapped === 'boolean';
-                case 'object':
-                    return typeof unwrapped === 'object';
-                case 'array':
-                    return Array.isArray(unwrapped);
-            }
+            if (type === 'dimension') return is(through(left), DimensionResult);
+            if (Object.hasOwn(IsTypeOperation.CHECKS, type)) return IsTypeOperation.CHECKS[type](value);
 
-            if (unwrapped.constructor?.name === type) return true;
-            let className = snakeToCamel(type);
-            className = className.charAt(0).toUpperCase() + className.slice(1);
-            if (from(through(l)) && from(through(l)).constructor?.name === className) return true;
-            return unwrapped != null && unwrapped.constructor?.name === className;
+            if (value.constructor?.name === type) return true;
+            const className = snakeToCamel(type).replace(/^./, c => c.toUpperCase());
+            return from(through(left))?.constructor?.name === className || value.constructor?.name === className;
         }
     }
 
     class CastOperation extends Expression {
-        static unwrapDimension(val) { 
-            return is(from(through(val)), Dimension) ? from(through(val)).number : val; 
+        static unwrapDimension(value) {
+            return is(through(value), DimensionResult) ? through(value).number : value;
         }
 
-        static prefix(val, pre) { 
-            return val.toString().startsWith(pre) ? val.toString() : pre + val.toString(); 
+        static prefix(value, sigil) {
+            return value.toString().startsWith(sigil) ? value.toString() : sigil + value.toString();
         }
 
-        static cast(ValueType, value, expression, prefix = '') {
+        static cast(ValueType, value, expression, sigil = '') {
             return new ValueType(expression.scope, expression.source, {
                 tokenStart: expression.tokenStart,
                 tokenEnd: expression.tokenEnd,
-                value: CastOperation.prefix(value, prefix)
+                value: CastOperation.prefix(value, sigil)
             });
         }
 
         static STRATEGIES = {
-            number: (l) => Number(unwrap(CastOperation.unwrapDimension(l))) || 0,
-            float: (l) => parseFloat(CastOperation.unwrapDimension(l).toString()),
-            int: (l) => parseInt(CastOperation.unwrapDimension(l).toString()),
-            integer: (l) => parseInt(CastOperation.unwrapDimension(l).toString()),
-            string: (l) => l.toString(),
-            boolean: (l) => (l.toString() === 'false' || unwrap(l) == 0) ? false : !!unwrap(l),
-            id: (l, c, t, o, expr) => CastOperation.cast(Id, l, expr, '#').solve(c, t, o),
-            class: (l, c, t, o, expr) => CastOperation.cast(ActClass, l, expr, '.').solve(c, t, o),
-            json: (l) => JSON.stringify(unwrap(l)),
-            fragment: (l) => { 
-                const t = document.createElement('template'); 
-                t.innerHTML = l.toString(); 
-                return t.content; 
+            number: (left) => Number(unwrap(CastOperation.unwrapDimension(left))) || 0,
+            float: (left) => parseFloat(CastOperation.unwrapDimension(left).toString()),
+            int: (left) => parseInt(CastOperation.unwrapDimension(left).toString()),
+            integer: (left) => parseInt(CastOperation.unwrapDimension(left).toString()),
+            string: (left) => left.toString(),
+            boolean: (left) => (left.toString() === 'false' || looselyEquals(unwrap(left), 0)) ? false : !!unwrap(left),
+            json: (left) => JSON.stringify(unwrap(left)),
+            fragment: (left) => {
+                const template = document.createElement('template');
+                template.innerHTML = left.toString();
+                return template.content;
             },
-            selector: (l, c, t, o, expr) => CastOperation.cast(SelectorTemplate, l, expr).solve(c, t, o),
-            attribute: (l, c, t, o, expr) => CastOperation.cast(Attribute, l, expr).solve(c, t, o),
-            css_property: (l, c, t, o, expr) => CastOperation.cast(CSSProperty, l, expr).solve(c, t, o),
-            dimension: (l, c, t, o, expr) => CastOperation.cast(Dimension, l, expr).solve(c, t, o),
-            variable: (l, c, t, o, expr) => CastOperation.cast(Variable, l, expr).solve(c, t, o),
+            id: (left, ctx, target, opts, expr) => CastOperation.cast(Id, left, expr, '#').solve(ctx, target, opts),
+            class: (left, ctx, target, opts, expr) => CastOperation.cast(ActClass, left, expr, '.').solve(ctx, target, opts),
+            selector: (left, ctx, target, opts, expr) => CastOperation.cast(SelectorTemplate, left, expr).solve(ctx, target, opts),
+            attribute: (left, ctx, target, opts, expr) => CastOperation.cast(Attribute, left, expr).solve(ctx, target, opts),
+            css_property: (left, ctx, target, opts, expr) => CastOperation.cast(CSSProperty, left, expr).solve(ctx, target, opts),
+            dimension: (left, ctx, target, opts, expr) => CastOperation.cast(Dimension, left, expr).solve(ctx, target, opts),
+            variable: (left, ctx, target, opts, expr) => CastOperation.cast(Variable, left, expr).solve(ctx, target, opts),
         };
 
         async perform(ctx, target, opts) {
-            let { l, r } = await this.prepare(ctx, target, opts);
-            const strategy = CastOperation.STRATEGIES[r.toString()];
-            if (strategy) return await strategy(l, ctx, target, opts, this);
+            const { left, right } = await this.prepare(ctx, target, opts);
+            const strategy = CastOperation.STRATEGIES[right.toString()];
+            if (strategy) return await strategy(left, ctx, target, opts, this);
+        }
+    }
+
+    class NullishOperation extends Expression {
+        async perform(ctx, target, opts) {
+            const left = await ctx.solve(this.left, target, opts);
+            if (unwrap(left) !== null && unwrap(left) !== undefined) return left;
+            return ctx.solve(this.right, target, opts);
         }
     }
 
     class OrOperation extends Expression {
         async perform(ctx, target, opts) {
-            const l = await ctx.solve(this.l, target, opts);
-            if (unwrap(l)) return l;
-            return unwrap(l) || await ctx.asValueOf(this.r, target);
+            const left = await ctx.solve(this.left, target, opts);
+            return unwrap(left) ? left : await ctx.asValueOf(this.right, target);
         }
     }
 
     class AndOperation extends Expression {
         async perform(ctx, target, opts) {
-            const l = await ctx.solve(this.l, target, opts);
-            if (!unwrap(l)) return unwrap(l);
-            return unwrap(l) && await ctx.asValueOf(this.r, target);
+            const left = await ctx.solve(this.left, target, opts);
+            return unwrap(left) ? await ctx.asValueOf(this.right, target) : unwrap(left);
         }
     }
 
     class ThenOperation extends Expression {
-        async perform(ctx, target, opts) { return await ctx.solve(this.r, await ctx.asValueOf(this.l, target), opts); }
+        async perform(ctx, target, opts) {
+            return await ctx.solve(this.right, await ctx.asValueOf(this.left, target), opts);
+        }
     }
 
     class RescueOperation extends Expression {
         async perform(ctx, target, opts) {
-            try { 
-                return await ctx.solve(this.l, target, opts); 
-            } catch (e) {
-                if (is(e, Signal)) throw e;
-                if (is(this.r, Scope)) {
-                    const scopeData = ctx.scopeData(this.r);
-                    scopeData.exception = e;
-                    scopeData.exception.message = (e.actException ?? e).message;
+            try {
+                return await ctx.solve(this.left, target, opts);
+            } catch (error) {
+                if (is(error, Signal)) throw error;
+
+                if (is(this.right, Scope)) {
+                    const scopeData = ctx.scopeData(this.right);
+                    scopeData.exception = error;
+                    scopeData.exception.message = (error.actException ?? error).message;
                 }
 
-                return await ctx.solve(this.r, target, opts);
+                return await ctx.solve(this.right, target, opts);
             }
         }
     }
 
     class IsInOperation extends Expression {
-        static is_in(l, r) {
-            if (Array.isArray(unwrap(r))) {
-                return r.includes(unwrap(l));
-            } else if (is(unwrap(r), Object)) {
-                return Object.keys(unwrap(r)).includes(l.toString());
-            } else if (typeof unwrap(r) === 'string') {
-                return unwrap(r).includes(l.toString());
+        static is_in(left, right) {
+            if (Array.isArray(unwrap(right))) {
+                return right.includes(unwrap(left));
+            } else if (is(unwrap(right), Object)) {
+                return Object.keys(unwrap(right)).includes(left.toString());
+            } else if (typeof unwrap(right) === 'string') {
+                return unwrap(right).includes(left.toString());
             }
 
             return false;
@@ -1705,6 +970,7 @@
         CastOperation,
         InsertExpression,
         IsTypeOperation,
+        NullishOperation,
         OrOperation,
         RescueOperation,
         SetExpression,
@@ -1714,35 +980,45 @@
     };
 
     [
-        ['Mod', (l, r) => l % r],
-        ['Sub', (l, r) => l - r],
-        ['Add', (l, r) => l + r],
-        ['Div', (l, r) => l / r],
-        ['Mul', (l, r) => l * r],
-        ['Like', (l, r) => l == r],
-        ['NotLike', (l, r) => l != r],
-        ['Equal', (l, r) => l === r],
-        ['NotEqual', (l, r) => l !== r],
-        ['Gt', (l, r) => l > r],
-        ['Gte', (l, r) => l >= r],
-        ['Lt', (l, r) => l < r],
-        ['Lte', (l, r) => l <= r],
-        ['IsNotIn', (l, r) => !IsInOperation.is_in(l, r)],
-        ['SubSet', (l, r) => l.set(l - r), true],
-        ['AddSet', (l, r) => l.set(l + r), true],
-    ].forEach(([name, op, isSet]) => {
-        const C = class extends Expression {
+        ['Mod', (left, right) => left % right],
+        ['Sub', (left, right) => left - right],
+        ['Add', (left, right) => left + right],
+        ['Div', (left, right) => left / right],
+        ['Mul', (left, right) => left * right],
+        ['Like', (left, right) => looselyEquals(left, right)],
+        ['NotLike', (left, right) => !looselyEquals(left, right)],
+        ['Equal', (left, right) => left === right],
+        ['NotEqual', (left, right) => left !== right],
+        ['Gt', (left, right) => left > right],
+        ['Gte', (left, right) => left >= right],
+        ['Lt', (left, right) => left < right],
+        ['Lte', (left, right) => left <= right],
+        ['IsNotIn', (left, right) => !IsInOperation.is_in(left, right)],
+        ['SubSet', (left, right) => left.set(left - right), true],
+        ['AddSet', (left, right) => left.set(left + right), true],
+    ].forEach(([name, operation, isAssignment]) => {
+        const OperationClass = class extends Expression {
             async perform(ctx, target, opts) {
-                if (isSet) return this.performWith(ctx, target, opts, op);
-                const { l, r } = await this.prepare(ctx, target, opts);
-                if (is(from(through(l)), Dimension) && is(from(through(r)), Dimension) && l.unit === r.unit)
-                    return new DimensionResult({ number: op(unwrap(l), unwrap(r)), unit: l.unit }, this);
+                if (isAssignment) return this.performWith(ctx, target, opts, operation);
 
-                return op(unwrap(l), unwrap(r));
+                const { left, right } = await this.prepare(ctx, target, opts);
+                const leftDimension = through(left), rightDimension = through(right);
+
+                if (is(leftDimension, DimensionResult) && is(rightDimension, DimensionResult)) {
+                    if (leftDimension.unit !== rightDimension.unit) return null;
+                    const result = operation(leftDimension.number, rightDimension.number);
+                    return typeof result === 'number'
+                        ? new DimensionResult({ number: result, unit: leftDimension.unit }, this)
+                        : result;
+                }
+
+                const numericValue = (value, dimension) => is(dimension, DimensionResult) ? dimension.number : unwrap(value);
+                return operation(numericValue(left, leftDimension), numericValue(right, rightDimension));
             }
         };
-        Object.defineProperty(C, 'name', { value: name + 'Operation' });
-        Operators[name + 'Operation'] = C;
+
+        Object.defineProperty(OperationClass, 'name', { value: name + 'Operation' });
+        Operators[name + 'Operation'] = OperationClass;
     });
 
     class Lexer {
@@ -1767,26 +1043,27 @@
             dot: 'parseClass',
             lcurly: 'parseSelectorTemplate',
             backtick: 'parseTemplateValue',
-            word: 'parseSimple',
-            number: 'parseSimple',
-            cssProp: 'parseSimple',
-            dimension: 'parseSimple',
-            attribute: 'parseSimple',
-            variable: 'parseSimple',
-            id: 'parseSimple',
-            property: 'parseSimple',
-            tag: 'parseSimple',
+            word: 'parseSimpleValue',
+            number: 'parseSimpleValue',
+            cssProp: 'parseSimpleValue',
+            dimension: 'parseSimpleValue',
+            attribute: 'parseSimpleValue',
+            variable: 'parseSimpleValue',
+            id: 'parseSimpleValue',
+            property: 'parseSimpleValue',
+            tag: 'parseSimpleValue',
             lparen: 'parseScope',
             do: 'parseScope',
-            lbrace: 'parseCollection'
+            lbrace: 'parseCollection',
+            negative: 'parseNegativePrefix',
         };
-
 
         static EXPRESSIONS = {
             bang: 'parseCallExpressionEmpty',
             call: 'parseCallExpression',
             colon: 'parseActExpression',
             dot: 'parseAtExpression',
+            safedot: 'parseAtExpression',
             insert: 'parseInsertExpression',
             lbrace: 'parseSubscriptExpression',
             lparen: 'parseCallExpressionParens',
@@ -1800,6 +1077,7 @@
             '%': 'ModOperation',
             'and': 'AndOperation',
             'or': 'OrOperation',
+            '??': 'NullishOperation',
             'is': 'EqualOperation',
             'is_not': 'NotEqualOperation',
             '<': 'LtOperation',
@@ -1823,20 +1101,27 @@
         };
 
         static SENTENCE_END = {
-            ';': 'sync',
-            '&': 'async',
-            '?': 'condition',
-            '~': 'branch',
-            '>>': 'fwd',
+            ';': Sentence.MODE.SYNC,
+            '&': Sentence.MODE.ASYNC,
+            '?': Sentence.MODE.CONDITION,
+            '~': Sentence.MODE.BRANCH,
+            '>>': Sentence.MODE.FORWARD,
         };
 
-        static TOKENS = [
-            ['sentence_end', RegExp(Object.keys(this.SENTENCE_END).map(r => regexEscape(r)).join('|'))],
+        static regexEscape(text) {
+            return text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        }
+
+        static IMPLICIT_FINAL_TERMINATOR = '\n;';
+
+        static TOKENS_BY_PRECEDENCE = [
+            ['safedot', /\?\./],
+            ['sentence_end', RegExp(Object.keys(this.SENTENCE_END).map(this.regexEscape).join('|'))],
             ['string', /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/],
             ['url', /https?:\/\/(?:www\.)?[-a-zA-Z0-9@:%._+~#=]{2,256}\.[a-z]{2,63}\b[-a-zA-Z0-9@:%_+.~#?&\/=]*/],
             ['comment', /\/\*[\s\S]*?\*\/|\/\/.*/],
             ['insert', /(?:^|\s+)?<<\s*/],
-            ['operator', RegExp(Object.keys(this.OPERATORS).map(r => '\\s+' + regexEscape(r) + '\\s+').join('|'))],
+            ['operator', RegExp('\\s+(?:' + Object.keys(this.OPERATORS).sort((a, b) => b.length - a.length).map(this.regexEscape).join('|') + ')\\s+')],
             ['space', /\s+/],
             ['lparen', /\(/],
             ['rparen', /\)/],
@@ -1856,6 +1141,7 @@
             ['path', /\/\b[-a-zA-Z0-9@:%_+.~#?&\/=]*/],
             ['property', /:[a-zA-Z0-9_\-]+/],
             ['arrow', /->/],
+            ['negative', /-/],
             ['word', /[a-zA-Z0-9_\-]+/],
             ['colon', /:/],
             ['comma', /,/],
@@ -1870,40 +1156,20 @@
             ['unknown', /./],
         ];
 
-        static TPL_TOKENS = [
-            ['lcurly', /\{/],
-            ['rcurly', /}/],
-            ['backtick', /`/],
-            ['backslash', /\\/],
-            ['content', /[^{}`\\]+/],
-        ];
-
-        static TPL_TOKENS_START = ['lcurly', 'backtick'];
-        static TPL_TOKENS_END = ['rcurly', 'backtick'];
-
-        static LANG_REGEX = new RegExp(this.TOKENS.map(t => `(${t[1].source})`).join('|'), 'gy');
-        static TPL_REGEX = new RegExp(this.TPL_TOKENS.map(t => `(${t[1].source})`).join('|'), 'gy');
+        static LANG_REGEX = new RegExp(this.TOKENS_BY_PRECEDENCE.map(t => `(${t[1].source})`).join('|'), 'gy');
 
         constructor(input) {
-            this.input = input + '\n;';
-            this.wasBackslash = false;
-            this.langRegex = new RegExp(Lexer.LANG_REGEX.source, 'gy');
-            this.tplRegex = new RegExp(Lexer.TPL_REGEX.source, 'gy');
-            this.regex = this.langRegex;
-            this.tplMode = false;
-            this.tokens = [new Lexer.Token(null, '', 0, 0, 0), new Lexer.Token(null, '', 0, 0, 0)];
+            this.input = input + Lexer.IMPLICIT_FINAL_TERMINATOR;
+            this.regex = new RegExp(Lexer.LANG_REGEX.source, 'gy');
+            this.previousToken = new Lexer.Token(null, '', 0, 0, 0);
+            this.currentToken = new Lexer.Token(null, '', 0, 0, 0);
             this.index = 0;
             this.line = 1;
             this.column = 0;
         }
 
-        hasMoreTokens() { return this.input.length > this.index; }
-
-        setTplMode(tplMode) {
-            if (Act.config.lexerDebug) console.warn(`Lexer setTplMode: Lexer set to ${tplMode ? 'template' : 'language'} mode.`);
-            this.tplMode = tplMode;
-            this.regex = tplMode ? this.tplRegex : this.langRegex;
-            this.regex.lastIndex = this.index;
+        hasMoreTokens() {
+            return this.input.length > this.index;
         }
 
         next() {
@@ -1916,36 +1182,25 @@
                     continue;
                 }
 
-                const groupIndex = match.findIndex((m, i) => i > 0 && m !== undefined);
-                const type = (this.tplMode ? Lexer.TPL_TOKENS : Lexer.TOKENS)[groupIndex - 1][0];
+                const groupIndex = match.findIndex((group, i) => i > 0 && group !== undefined);
+                const type = Lexer.TOKENS_BY_PRECEDENCE[groupIndex - 1][0];
                 const value = match[0];
 
                 this.index = this.regex.lastIndex;
 
-                if (!this.wasBackslash) {
-                    if (!this.tplMode && Lexer.TPL_TOKENS_START.includes(type)) this.setTplMode(true);
-                    else if (this.tplMode && (type == 'lcurly')) this.setTplMode(false);
-                    else if (!this.tplMode && (type == 'rcurly')) this.setTplMode(true);
-                    else if (this.tplMode && Lexer.TPL_TOKENS_END.includes(type)) this.setTplMode(false);
-                }
-
-                this.wasBackslash = (type == 'backslash' && !this.wasBackslash);
-
                 if (value.includes('\n')) {
-                    const lines = (value.match(/\n/g) || []).length;
-                    this.line += lines;
-                    this.column = value.length - lines;
+                    const newlines = (value.match(/\n/g) || []).length;
+                    this.line += newlines;
+                    this.column = value.length - newlines;
                 } else {
                     this.column += value.length;
                 }
 
-                this.tokens.shift();
-                this.tokens.push(
-                    new Lexer.Token(type, value, match.index, this.line, this.column)
-                );
+                this.previousToken = this.currentToken;
+                this.currentToken = new Lexer.Token(type, value, match.index, this.line, this.column);
 
                 if (Act.config.lexerDebug) this.debugNext();
-                if (type == 'comment') continue;
+                if (type === 'comment') continue;
 
                 return this;
             }
@@ -1955,15 +1210,34 @@
 
         debugNext() {
             console.log(this.input.substring(0, this.index) + '⬅️' + this.input.substring(this.index));
-            console.trace(`Lexer next() (${this.tplMode ? 'template' : 'lang'} mode)`, this.peek());
+            console.trace('Lexer next()', this.peek());
+        }
+
+        peekChar() {
+            return this.input[this.index];
+        }
+
+        consumeChar() {
+            return this.input[this.index++];
+        }
+
+        scanRaw(stopChars) {
+            let content = '';
+            while (this.index < this.input.length) {
+                const character = this.input[this.index];
+                if (stopChars.includes(character)) break;
+                content += character;
+                this.index++;
+            }
+            return content;
         }
 
         peek() {
-            return this.tokens[1];
+            return this.currentToken;
         }
 
-        prev() {
-            return this.tokens[0];
+        previous() {
+            return this.previousToken;
         }
 
         tokenIs(...types) {
@@ -1983,13 +1257,13 @@
         }
 
         tokenIsOperator() {
-            return Lexer.OPERATORS[this.peek().value.trim()];
+            return this.currentToken.type === 'operator';
         }
 
         fail(message) {
-            const e = new ActSyntaxError(`at line ${this.line}, column ${this.column}: ${message}`);
-            e.token = this.peek();
-            throw e;
+            const error = new ActSyntaxError(`at line ${this.line}, column ${this.column}: ${message}`);
+            error.token = this.peek();
+            throw error;
         }
 
         expect(...types) {
@@ -2011,47 +1285,47 @@
         }
 
         consume(...types) {
-            return (types.length === 0 || this.tokenIs(...types)) ? this.next().fwd() : false;
+            return (types.length === 0 || this.tokenIs(...types)) ? this.next().skipSpaces() : false;
         }
 
-        fwd() {
+        skipSpaces() {
             while (this.nextIf('space'));
             return this;
         }
 
-        fwdWithComma() {
+        skipSpacesAndCommas() {
             while (this.nextIf('space', 'comma'));
             return this;
         }
     }
-    
-    const parseURLValue = (lexer, scope, source, urlString, allowedProtocols) => {
-        if (urlString.length > 2048) lexer.fail(`URL exceeds maximum length of 2048 characters.`);
+
+    const MAX_URL_LENGTH = 2048;
+
+    const buildURLValue = (lexer, scope, source, urlString, allowedProtocols) => {
+        if (urlString.length > MAX_URL_LENGTH) lexer.fail(`URL exceeds maximum length of ${MAX_URL_LENGTH} characters.`);
+
         const url = URL.parse(urlString);
         if (url === null) lexer.fail(`Invalid URL "${urlString}"`);
         if (!allowedProtocols.includes(url.protocol))
             lexer.fail(`Invalid protocol "${url.protocol}" in URL "${urlString}". Only ${allowedProtocols.join(', ')} are allowed.`);
+
         return new ActURL(scope, source, { value: url });
     };
 
     class Parser {
         static VALUES = {
             word: [Word],
-            number: [ActNumber, v => parseFloat(v)],
-            cssProp: [CSSProperty, v => v.slice(1)],
+            number: [ActNumber, text => parseFloat(text)],
+            cssProp: [CSSProperty, text => text.slice(1)],
             dimension: [Dimension],
-            attribute: [Attribute, v => v.slice(1)],
-            variable: [Variable, v => v.slice(1)],
+            attribute: [Attribute, text => text.slice(1)],
+            variable: [Variable, text => text.slice(1)],
             id: [Id],
-            property: [Property, v => v.slice(1)],
-            tag: [Tag, v => v.slice(1, -1)],
+            property: [Property, text => text.slice(1)],
+            tag: [Tag, text => text.slice(1, -1)],
         };
 
         static ESCAPE_CHARS = {
-            "'": "'",
-            '"': '"',
-            '`': '`',
-            '\\': '\\',
             'n': '\n',
             'r': '\r',
             't': '\t',
@@ -2076,8 +1350,7 @@
         }
 
         parse() {
-            const root = new Scope(null, this.source);
-            root.tokenStart = this.lexer.peek();
+            const root = new Scope(null, this.source, { tokenStart: this.lexer.peek() });
 
             while (this.lexer.hasMoreTokens()) {
                 const sentence = this.parseSentence(root);
@@ -2091,200 +1364,201 @@
         }
 
         parseSentence(scope) {
-            this.lexer.fwd();
+            this.lexer.skipSpaces();
             if (this.lexer.tokenIsEnd()) return;
 
             const sentence = new Sentence(scope, this.source);
             sentence.tokenStart = this.lexer.peek();
+
             let target, value = this.parseExpression(scope);
 
-            if (this.lexer.nextIf('space') && this.lexer.fwd().tokenIsValue()) {
+            const anotherValueFollows = this.lexer.nextIf('space') && this.lexer.skipSpaces().tokenIsValue();
+            if (anotherValueFollows) {
                 target = value;
                 value = this.parseExpression(scope);
             }
 
             sentence.target = target;
             sentence.value = value;
-            sentence.mode = Lexer.SENTENCE_END[this.lexer.fwd().peek().value] || 'sync';
+            this.lexer.skipSpaces();
+
+            if (target !== undefined && !this.lexer.tokenIsEnd()) {
+                this.lexer.fail(`Unexpected ${this.lexer.peek().type} '${this.lexer.peek().value}'. Expected a sentence end token (${Object.keys(Lexer.SENTENCE_END).join(', ')}), or did you mean '${target.tokenStart.value}: ...'?`);
+            }
+
+            sentence.mode = Lexer.SENTENCE_END[this.lexer.peek().value] || Sentence.MODE.SYNC;
             sentence.tokenEnd = this.lexer.peek();
 
             return sentence;
         }
 
         parseExpression(scope, skip = []) {
-            let l;
-            this.lexer.fwd();
+            let left;
+            this.lexer.skipSpaces();
 
             if (this.lexer.tokenIsValue()) {
-                l = this.parseValue(scope);
+                left = this.parseValue(scope);
             } else if (!this.lexer.tokenIs('insert')) {
                 this.lexer.fail(`Unexpected token ${this.lexer.peek().type} "${this.lexer.peek().value}" while parsing an expression. A value token or an insert token were expected.`);
             }
-            if (this.lexer.tokenIs(...skip)) return l;
 
-            if (this.isPrefix(l)) l = this.parsePrefixedValue(scope, l);
-            else if (this.isKeyword(l)) l = this.parseKeywordExpression(scope, l);
-            if (this.lexer.tokenIsEnd() && !this.lexer.tokenIs('rparen', 'end')) return l;
+            if (this.lexer.tokenIs(...skip)) return left;
+
+            if (this.isPrefix(left)) left = this.parsePrefixedValue(scope, left);
+            else if (this.isKeyword(left)) left = this.parseKeywordExpression(scope, left);
+            if (this.lexer.tokenIsEnd() && !this.lexer.tokenIs('rparen', 'end')) return left;
 
             while (!this.lexer.tokenIsEnd() && this.lexer.hasMoreTokens()) {
                 if (this.lexer.tokenIsExpression()) {
-                    l = this[
-                        Lexer.EXPRESSIONS[this.lexer.peek().type]
-                    ](scope, l, [...skip, 'insert']);
+                    left = this[Lexer.EXPRESSIONS[this.lexer.peek().type]](scope, left, [...skip, 'insert']);
                 } else if (this.lexer.tokenIsOperator()) {
-                    l = this.parseOperator(scope, l, [...skip, 'insert']);
+                    left = this.parseOperator(scope, left, [...skip, 'insert']);
                 } else {
                     break;
                 }
             }
 
-            return l;
+            return left;
         }
 
-        parseOperator(scope, l, skip = []) {
+        parseOperator(scope, left, skip = []) {
             const operation = new Operators[
                 Lexer.OPERATORS[this.lexer.peek().value.trim()]
-            ](scope, this.source, { tokenStart: l.tokenStart });
+            ](scope, this.source, { tokenStart: left.tokenStart });
 
-            operation.l = l;
+            operation.left = left;
             this.lexer.consume();
-            operation.r = this.parseExpression(scope, ['operator', ...skip]);
-            operation.tokenEnd = this.lexer.prev();
+            operation.right = this.parseExpression(scope, ['operator', ...skip]);
+            operation.tokenEnd = this.lexer.previous();
             return operation;
         }
 
-        #makeExpressionWithList(ExprClass, scope, l) {
-            const expr = new ExprClass(scope, this.source, { tokenStart: l.tokenStart });
-            expr.l = l;
-            expr.r = new List;
-            return expr;
+        #newExpressionWithList(ExpressionClass, scope, left) {
+            const expression = new ExpressionClass(scope, this.source, { tokenStart: left.tokenStart });
+            expression.left = left;
+            expression.right = new List;
+            return expression;
         }
 
-        parseKeywordExpression(scope, l) {
-            const expr = this.#makeExpressionWithList(KeywordExpression, scope, l);
-            this.lexer.fwd();
+        #parseArguments(ExpressionClass, scope, left, skip, { done, separator = 'skipSpaces', stopOnOperator = false, endAtPrevious = false }) {
+            const expression = this.#newExpressionWithList(ExpressionClass, scope, left);
 
-            while (!this.lexer.nextIf('comma') && this.lexer.hasMoreTokens() && !this.lexer.tokenIsEnd() && !this.lexer.tokenIsOperator()) {
-                expr.r.push(this.parseExpression(scope));
-                this.lexer.fwd();
+            while (!done() && this.lexer.hasMoreTokens()) {
+                if (this.lexer.tokenIs(...skip)) break;
+                if (stopOnOperator && this.lexer.tokenIsOperator()) break;
+                expression.right.push(this.parseExpression(scope, skip));
+                this.lexer[separator]();
             }
 
-            expr.tokenEnd = this.lexer.peek();
-            return expr;
+            expression.tokenEnd = endAtPrevious ? this.lexer.previous() : this.lexer.peek();
+            return expression;
         }
 
-        parseAtExpression(scope, l) {
-            this.lexer.expect('dot');
-            const expr = this.#makeExpressionWithList(AtExpression, scope, l);
+        parseKeywordExpression(scope, left) {
+            this.lexer.skipSpaces();
+            return this.#parseArguments(KeywordExpression, scope, left, [], {
+                done: () => this.lexer.nextIf('comma') || this.lexer.tokenIsEnd(),
+                stopOnOperator: true,
+            });
+        }
 
-            while (this.lexer.nextIf('dot') && this.lexer.hasMoreTokens()) {
+        parseAtExpression(scope, left) {
+            this.lexer.expect('dot', 'safedot');
+            const expression = this.#newExpressionWithList(AtExpression, scope, left);
+            expression.safe = this.lexer.tokenIs('safedot');
+
+            while (this.lexer.nextIf('dot', ...(expression.safe ? ['safedot'] : [])) && this.lexer.hasMoreTokens()) {
                 this.lexer.expect('word', 'attribute', 'cssProp', 'variable', 'lparen');
-                expr.r.push(this.parseValue(scope));
+                expression.right.push(this.parseValue(scope));
             }
 
-            expr.tokenEnd = this.lexer.prev();
-            return expr;
+            expression.tokenEnd = this.lexer.previous();
+            return expression;
         }
 
-        parseSubscriptExpression(scope, l) {
+        parseSubscriptExpression(scope, left) {
             this.lexer.expect('lbrace');
-            const expr = this.#makeExpressionWithList(SubscriptExpression, scope, l);
+            const expression = this.#newExpressionWithList(SubscriptExpression, scope, left);
 
             while (this.lexer.nextIf('lbrace') && this.lexer.hasMoreTokens()) {
-                this.lexer.fwd().expectValue();
-                expr.r.push(this.parseExpression(scope, ['rbrace']));
-                this.lexer.fwd().nextIf('rbrace');
+                this.lexer.skipSpaces().expectValue();
+                expression.right.push(this.parseExpression(scope, ['rbrace']));
+                this.lexer.skipSpaces().nextIf('rbrace');
             }
 
-            expr.tokenEnd = this.lexer.peek();
-            return expr;
+            expression.tokenEnd = this.lexer.peek();
+            return expression;
         }
 
-        parseCallExpressionEmpty(scope, l) {
+        parseCallExpressionEmpty(scope, left) {
             this.lexer.expect('bang').next();
-            const expr = this.#makeExpressionWithList(CallExpression, scope, l);
-            expr.tokenEnd = this.lexer.peek();
-            return expr;
+            const expression = this.#newExpressionWithList(CallExpression, scope, left);
+            expression.tokenEnd = this.lexer.peek();
+            return expression;
         }
 
-        parseInsertExpression(scope, l, skip = []) {
-            this.lexer.expect('insert').next().fwd();
-            const insertExpression = new InsertExpression(scope, this.source);
+        parseInsertExpression(scope, left, skip = []) {
+            this.lexer.expect('insert').next().skipSpaces();
+            const expression = new InsertExpression(scope, this.source);
 
-            if (l === undefined) {
-                insertExpression.tokenStart = this.lexer.prev();
+            if (left === undefined) {
+                expression.tokenStart = this.lexer.previous();
             } else {
-                insertExpression.tokenStart = l.tokenStart;
-                insertExpression.l = l;
+                expression.tokenStart = left.tokenStart;
+                expression.left = left;
             }
 
-            insertExpression.r = this.parseExpression(scope, skip);
-            insertExpression.tokenEnd = this.lexer.peek();
-            return insertExpression;
+            expression.right = this.parseExpression(scope, skip);
+            expression.tokenEnd = this.lexer.peek();
+            return expression;
         }
 
-        parseCallExpression(scope, l, skip = []) {
+        parseCallExpression(scope, left, skip = []) {
             this.lexer.expect('call').consume();
-            const expr = this.#makeExpressionWithList(CallExpression, scope, l);
-
-            while (!this.lexer.tokenIs('comma') && !this.lexer.tokenIsEnd() && this.lexer.hasMoreTokens()) {
-                if (this.lexer.tokenIs(...skip)) break;
-                expr.r.push(this.parseExpression(scope, skip));
-                this.lexer.fwd();
-            }
-
-            expr.tokenEnd = this.lexer.peek();
-            return expr;
+            return this.#parseArguments(CallExpression, scope, left, skip, {
+                done: () => this.lexer.tokenIs('comma') || this.lexer.tokenIsEnd(),
+            });
         }
 
-        parseCallExpressionParens(scope, l, skip = []) {
+        parseCallExpressionParens(scope, left, skip = []) {
             this.lexer.expect('lparen').consume();
-            const expr = this.#makeExpressionWithList(CallExpression, scope, l);
-
-            while (!this.lexer.nextIf('rparen') && this.lexer.hasMoreTokens()) {
-                if (this.lexer.tokenIs(...skip)) break;
-                expr.r.push(this.parseExpression(scope, skip));
-                this.lexer.fwdWithComma();
-            }
-
-            expr.tokenEnd = this.lexer.prev();
-            return expr;
+            return this.#parseArguments(CallExpression, scope, left, skip, {
+                done: () => this.lexer.nextIf('rparen'),
+                separator: 'skipSpacesAndCommas',
+                endAtPrevious: true,
+            });
         }
 
-        parseActExpression(scope, l, skip = []) {
+        parseActExpression(scope, left, skip = []) {
             this.lexer.expect('colon').consume();
-            const expr = this.#makeExpressionWithList(ActExpression, scope, l);
-
-            while (!this.lexer.nextIf('comma') && !this.lexer.tokenIsEnd() && this.lexer.hasMoreTokens()) {
-                if (this.lexer.tokenIs(...skip)) break;
-                expr.r.push(this.parseExpression(scope, skip));
-                this.lexer.fwd();
-            }
-
-            expr.tokenEnd = this.lexer.peek();
-            return expr;
+            return this.#parseArguments(ActExpression, scope, left, skip, {
+                done: () => this.lexer.nextIf('comma') || this.lexer.tokenIsEnd(),
+            });
         }
 
         parseValue(scope) {
             this.lexer.expectValue();
             const tokenStart = this.lexer.peek();
+
             const value = this[Lexer.VALUES[this.lexer.peek().type]](scope);
             value.tokenStart = tokenStart;
             value.tokenEnd = this.lexer.peek();
             if (!is(value, List, Spread)) this.lexer.next();
+
             return value;
         }
 
         parseScope(parentScope) {
             const scope = new Scope(parentScope, this.source);
             scope.tokenStart = this.lexer.peek();
+
             const endToken = this.lexer.expect('lparen', 'do').tokenIs('do') ? 'end' : 'rparen';
             this.lexer.next();
 
             while (!this.lexer.tokenIs(endToken) && this.lexer.hasMoreTokens()) {
                 const sentence = this.parseSentence(scope);
                 if (sentence) scope.value.push(sentence);
-                if (this.lexer.tokenIsEnd() && !this.lexer.tokenIs(endToken)) this.lexer.next().fwd();
+                if (this.lexer.tokenIsEnd() && !this.lexer.tokenIs(endToken)) this.lexer.next().skipSpaces();
             }
 
             scope.tokenEnd = this.lexer.peek();
@@ -2294,51 +1568,53 @@
         parseCollection(scope) {
             this.lexer.expect('lbrace').consume();
 
-            if (this.lexer.nextIf('colon') && this.lexer.fwd().tokenIs('rbrace')) { 
-                return new ActObject(scope, this.source, { value: new Map }); 
-            } else if (this.lexer.fwd().tokenIs('rbrace')) { 
-                return new ActArray(scope, this.source, { value: [] }); 
+            if (this.lexer.tokenIs('rbrace')) {
+                return new ActArray(scope, this.source, { value: [] });
             }
 
-            const initial = this.parseExpression(scope, ['colon']);
-            this.lexer.fwd();
+            if (this.lexer.tokenIs('colon')) {
+                this.lexer.next().skipSpaces().expect('rbrace');
+                return new ActObject(scope, this.source, { value: new Map });
+            }
+
+            const first = this.parseExpression(scope, ['colon']);
+            this.lexer.skipSpaces();
 
             if (this.lexer.nextIf('comma') || this.lexer.tokenIsValue() || this.lexer.tokenIs('rbrace')) {
-                this.lexer.fwd();
-                return new ActArray(scope, this.source, { value: this.parseArray(scope, initial) });
+                this.lexer.skipSpaces();
+                return new ActArray(scope, this.source, { value: this.parseArray(scope, first) });
             } else if (this.lexer.nextIf('colon')) {
-                this.lexer.fwd();
+                this.lexer.skipSpaces();
                 const objectScope = new Scope(scope, this.source);
-                return new ActObject(objectScope, this.source, { value: this.parseObject(objectScope, initial) });
+                return new ActObject(objectScope, this.source, { value: this.parseObject(objectScope, first) });
             }
 
             this.lexer.fail(`Unexpected token ${this.lexer.peek().type} "${this.lexer.peek().value}" while parsing a collection. Only colon, comma, rbrace and value tokens where expected.`);
         }
 
-        parseArray(scope, value) {
-            const array = [];
-            array.push(value);
-            this.lexer.fwd();
+        parseArray(scope, firstValue) {
+            const array = [firstValue];
+            this.lexer.skipSpaces();
 
             while (!this.lexer.tokenIs('rbrace') && this.lexer.hasMoreTokens()) {
                 array.push(this.parseExpression(scope, ['colon']));
-                this.lexer.fwdWithComma();
+                this.lexer.skipSpacesAndCommas();
             }
 
             this.lexer.expect('rbrace');
             return array;
         }
 
-        parseObject(scope, key) {
+        parseObject(scope, firstKey) {
             const map = new Map;
-            map.set(key, this.parseExpression(scope, ['colon']));
-            this.lexer.fwdWithComma();
+            map.set(firstKey, this.parseExpression(scope, ['colon']));
+            this.lexer.skipSpacesAndCommas();
 
             while (!this.lexer.tokenIs('rbrace') && this.lexer.hasMoreTokens()) {
-                key = this.parseExpression(scope, ['colon']);
-                this.lexer.fwd().expect('colon').consume();
+                const key = this.parseExpression(scope, ['colon']);
+                this.lexer.skipSpaces().expect('colon').consume();
                 map.set(key, this.parseExpression(scope, ['colon']));
-                this.lexer.fwdWithComma();
+                this.lexer.skipSpacesAndCommas();
             }
 
             this.lexer.expect('rbrace');
@@ -2347,86 +1623,82 @@
 
         parseString(scope) {
             this.lexer.expect('string');
-            return new ActString(
-                scope,
-                this.source,
-                { value: this.lexer.peek().value.slice(1, -1).replace(/\\(.)/g, (_, char) => Parser.ESCAPE_CHARS[char] || char) }
-            );
+            const raw = this.lexer.peek().value.slice(1, -1);
+            return new ActString(scope, this.source, {
+                value: raw.replace(/\\(.)/g, (_, character) => Parser.ESCAPE_CHARS[character] || character),
+            });
         }
 
         parseFunction(scope) {
-            this.lexer.expect('arrow').next().fwd().expect('variable', 'list', 'lparen', 'do');
+            this.lexer.expect('arrow').next().skipSpaces().expect('variable', 'list', 'lparen', 'do');
             const fn = { args: [] };
 
             while (this.lexer.tokenIs('variable') && this.lexer.hasMoreTokens()) {
                 fn.args.push(this.lexer.peek().value.slice(1));
-                this.lexer.next().fwd();
+                this.lexer.next().skipSpaces();
             }
 
             if (this.lexer.nextIf('list')) {
                 this.lexer.expect('variable');
                 fn.args.push([this.lexer.peek().value.slice(1)]);
-                this.lexer.next().fwd();
+                this.lexer.next().skipSpaces();
             }
 
             fn.scope = this.parseScope(scope);
             return new ActFunction(scope, this.source, { value: fn });
         }
 
-        parseTemplate(scope, startToken, endToken) {
-            let template = '';
+        #appendText(literals, text) {
+            literals[literals.length - 1] += text;
+        }
+
+        parseTemplate(scope, endChar) {
+            const literals = [''];
             const subscope = new Scope(scope, this.source);
 
-            this.lexer.expect(startToken).next();
+            for (;;) {
+                this.#appendText(literals, this.lexer.scanRaw(['{', '\\', endChar]));
 
-            while (!this.lexer.tokenIs(endToken) && this.lexer.hasMoreTokens()) {
-                if (this.lexer.nextIf('lcurly')) {
-                    this.lexer.setTplMode(false);
-                    while (!this.lexer.tplMode && this.lexer.hasMoreTokens()) {
+                const character = this.lexer.peekChar();
+                if (character === undefined) {
+                    this.lexer.fail(`Unclosed template, expected '${endChar}'.`);
+                } else if (character === endChar) {
+                    this.lexer.next();
+                    break;
+                } else if (character === '\\') {
+                    this.lexer.consumeChar();
+                    const escaped = this.lexer.consumeChar() ?? '';
+                    this.#appendText(literals, Parser.ESCAPE_CHARS[escaped] || escaped);
+                } else {
+                    this.lexer.consumeChar();
+                    this.lexer.next();
+                    while (!this.lexer.tokenIs('rcurly') && this.lexer.hasMoreTokens()) {
                         const sentence = this.parseSentence(subscope);
                         if (sentence) {
                             subscope.value.push(sentence);
-                            template += Template.interpolation(subscope.value.length - 1);
-                        } else {
-                            this.lexer.next();
+                            literals.push('');
                         }
+                        if (this.lexer.tokenIsEnd() && !this.lexer.tokenIs('rcurly')) this.lexer.next().skipSpaces();
                     }
-
-                    this.lexer.next();
-                } else if (!this.lexer.tplMode) {
-                    this.lexer.setTplMode(true);
                 }
-
-                if (this.lexer.tokenIs(endToken, 'lcurly')) {
-                    continue;
-                } else if (this.lexer.nextIf('backslash')) {
-                    const escaped = Parser.ESCAPE_CHARS[this.lexer.peek().value[0]];
-                    if (escaped) template += escaped;
-                    template += this.lexer.peek().value.slice(1);
-                } else {
-                    template += this.lexer.peek().value;
-                }
-
-                this.lexer.next();
             }
 
-            this.lexer.expect(endToken);
-            return { template, scope: (subscope.value.length > 0 ? subscope : null) };
+            return { literals, scope: (subscope.value.length > 0 ? subscope : null) };
         }
 
-        parseTemplateValue(scope, startToken = 'backtick', endToken = 'backtick') {
-            return new Template(scope, this.source, { value: this.parseTemplate(scope, startToken, endToken) });
+        parseTemplateValue(scope, endChar = '`') {
+            return new Template(scope, this.source, { value: this.parseTemplate(scope, endChar) });
         }
 
         parseSelectorTemplate(scope) {
-            return new SelectorTemplate(scope, this.source, { value: this.parseTemplateValue(scope, 'lcurly', 'rcurly') });
+            return new SelectorTemplate(scope, this.source, { value: this.parseTemplateValue(scope, '}') });
         }
 
-        parseSimple(scope) {
+        parseSimpleValue(scope) {
             const type = this.lexer.peek().type;
-            const [Class, transform = v => v] = Parser.VALUES[type];
+            const [ValueClass, transform = text => text] = Parser.VALUES[type];
             this.lexer.expect(type);
-            return new Class(scope, this.source, { value: transform(this.lexer.peek().value) });
+            return new ValueClass(scope, this.source, { value: transform(this.lexer.peek().value) });
         }
 
         parseClass(scope) {
@@ -2436,12 +1708,12 @@
 
         parsePath(scope) {
             this.lexer.expect('path');
-            return parseURLValue(this.lexer, scope, this.source, window.location.origin + this.lexer.peek().value, ['http:', 'https:']);
+            return buildURLValue(this.lexer, scope, this.source, window.location.origin + this.lexer.peek().value, ['http:', 'https:']);
         }
 
         parseUrl(scope) {
             this.lexer.expect('url');
-            return parseURLValue(this.lexer, scope, this.source, this.lexer.peek().value, ['http:', 'https:', 'ws:', 'wss:', 'file:']);
+            return buildURLValue(this.lexer, scope, this.source, this.lexer.peek().value, ['http:', 'https:', 'ws:', 'wss:', 'file:']);
         }
 
         parseList(scope) {
@@ -2449,13 +1721,25 @@
             return new Spread(scope, this.source, { value: this.parseExpression(scope) });
         }
 
-        parsePrefixedValue(scope, l) {
-            this.lexer.fwd().expectValue();
-            return new PrefixExpression(scope, this.source, { l: l.value, r: this.parseValue(scope) });
+        parsePrefixedValue(scope, left) {
+            this.lexer.skipSpaces().expectValue();
+            return new PrefixExpression(scope, this.source, { left: left.value, right: this.parseValue(scope) });
+        }
+
+        parseNegativePrefix(scope) {
+            this.lexer.next().skipSpaces().expectValue();
+            return new PrefixExpression(scope, this.source, { left: 'negative', right: this[Lexer.VALUES[this.lexer.peek().type]](scope) });
         }
     }
 
     class Source {
+        static TYPE = {
+            ATTRIBUTE: 'directAttribute',
+            INLINE_SCRIPT: 'inlineScript',
+            EXTERNAL_SCRIPT: 'externalScript',
+            ACT_RUN: 'actrun',
+        };
+
         args = [];
         attr;
         #code;
@@ -2464,13 +1748,13 @@
 
         get code() {
             if (this.#code !== null) return this.#code;
-            if (this.type == 'directAttribute') return this.attr.value;
-            if (this.type == 'inlineScript') return this.attr.ownerElement.innerHTML;
+            if (this.type === Source.TYPE.ATTRIBUTE) return this.attr.value;
+            if (this.type === Source.TYPE.INLINE_SCRIPT) return this.attr.ownerElement.innerHTML;
         }
 
         get element() {
-            if (this.type == 'actrun') return document.body;
-            if (this.type == 'directAttribute') return this.attr.ownerElement;
+            if (this.type === Source.TYPE.ACT_RUN) return document.body;
+            if (this.type === Source.TYPE.ATTRIBUTE) return this.attr.ownerElement;
             return this.attr.ownerElement.parentNode;
         }
 
@@ -2478,40 +1762,56 @@
             this.attr = attr;
             this.type = type;
             this.#code = code;
+
             if (is(scope, Scope)) {
                 this.scope = scope;
-            } else try {
-                const parser = new Parser(this);
-                this.scope = parser.parse();
-            } catch (e) {
-                const codeLines = this.code.split('\n'), line = codeLines[Math.max(0, e.token.line - 1)];
-                const logArgs = [
-                    '%c💣 act Syntax Error', 'font-weight: bold; font-size: 1.1em;', '\n',
-                    'while parsing Source', this, '\n',
-                    'for element', this.element, '\n',
-                ];
-
-                if (this.attr) logArgs.push(`in attribute "${this.attr.name}" of element`, this.attr.ownerElement, '\n');
-                logArgs.push(e.message, '\n\n');
-
-                if ((e.token.line - 1) > 1) logArgs.push(codeLines[e.token.line - 2], '\n');
-                logArgs.push(
-                    line.substring(0, e.token.column - e.token.value.length) +
-                    '⚠️➡️' + line.substring(e.token.column - e.token.value.length, e.token.column) +
-                    '⬅️⚠️' + line.substring(e.token.column) +
-                    '\n'
-                );
-                if (codeLines.length - (e.token.line) > 1) logArgs.push(codeLines[e.token.line], '\n');
-
-                console.error(...logArgs);
-                this.scope = null;
+                return;
             }
+
+            try {
+                this.scope = new Parser(this).parse();
+            } catch (error) {
+                this.scope = null;
+
+                if (!is(error, ActSyntaxError) || !error.token) {
+                    console.error('💣 act: unexpected error while parsing', this, 'for element', this.element, '\n', error);
+                    return;
+                }
+
+                this.#reportSyntaxError(error);
+            }
+        }
+
+        #reportSyntaxError(error) {
+            const codeLines = this.code.split('\n');
+            const line = codeLines[Math.max(0, error.token.line - 1)];
+
+            const logArgs = [
+                '%c💣 act Syntax Error', 'font-weight: bold; font-size: 1.1em;', '\n',
+                'while parsing Source', this, '\n',
+                'for element', this.element, '\n',
+            ];
+
+            if (this.attr) logArgs.push(`in attribute "${this.attr.name}" of element`, this.attr.ownerElement, '\n');
+            logArgs.push(error.message, '\n\n');
+
+            if ((error.token.line - 1) > 1) logArgs.push(codeLines[error.token.line - 2], '\n');
+            logArgs.push(
+                line.substring(0, error.token.column - error.token.value.length) +
+                '⚠️➡️' + line.substring(error.token.column - error.token.value.length, error.token.column) +
+                '⬅️⚠️' + line.substring(error.token.column) +
+                '\n'
+            );
+            if (codeLines.length - (error.token.line) > 1) logArgs.push(codeLines[error.token.line], '\n');
+
+            console.error(...logArgs);
         }
     }
 
     const Binder = {
-        PROP: '__act__',
+        BINDING_PROPERTY: '__act__',
         ATTRIBUTES: ['act', 'act-block'],
+
         EVENT_OPTIONS: [
             'once',
             'prevent',
@@ -2520,6 +1820,12 @@
             'target',
         ],
 
+        PART_SIGILS: {
+            ':': 'option',
+            '.': 'key',
+            '#': 'alias',
+        },
+
         INTERSECT_EVENTS: {
             inview: 'actinview',
             offview: 'actoffview',
@@ -2527,53 +1833,54 @@
             actoffview: 'actoffview',
         },
 
-        from(element, create = false) {
-            const binding = element[Binder.PROP];
-            if (!binding && create) return new Binding(element);
-            return binding;
+        from(element) {
+            return element[Binder.BINDING_PROPERTY];
+        },
+
+        ensure(element) {
+            return Binder.from(element) ?? new Binding(element);
         },
 
         eventName(name) {
-            if (Object.keys(Binder.INTERSECT_EVENTS).includes(name)) return Binder.INTERSECT_EVENTS[name];
-            return name;
+            return Object.hasOwn(Binder.INTERSECT_EVENTS, name) ? Binder.INTERSECT_EVENTS[name] : name;
         },
 
         bind(element) {
-            if (is(element, HTMLScriptElement) && element.attributes.type?.value == 'text/act') { 
-                return this.bindScript(element); 
+            if (is(element, HTMLScriptElement) && element.attributes.type?.value === 'text/act') {
+                return this.bindScript(element);
             }
 
-            const binding = this.from(element, true);
+            const binding = this.ensure(element);
             this.bindAttributes(element, binding);
             element.dispatchEvent(new CustomEvent('actbind', { bubbles: true, detail: { element, binding } }));
         },
 
         bindScript(element) {
             const target = element.parentNode;
-            const binding = this.from(target, true);
+            const binding = this.ensure(target);
 
             if (element.hasAttribute('src')) {
                 return (async () => {
                     const code = await fetch(
                         element.src, { method: 'GET', headers: { 'Content-Type': 'text/plain' } }
                     ).then(response => response.text());
-                    const source = new Source(element.attributes.src, 'externalScript', code);
-                    if (Act.config.start) target.dispatchEvent(new CustomEvent('actscriptloaded', { bubbles: true, detail: { element, target, binding } }));
+
+                    const source = new Source(element.attributes.src, Source.TYPE.EXTERNAL_SCRIPT, code);
+                    if (Act.isStartingUp) target.dispatchEvent(new CustomEvent('actscriptloaded', { bubbles: true, detail: { element, target, binding } }));
                     binding.addEvent('act', source);
                 })();
             }
 
-            if (
-                !element.hasAttribute('act-block') &&
-                !Array.from(element.attributes).some(attr => attr.name == 'act' || attr.name.startsWith('act@'))
-            ) {
+            const hasEventAttribute = Array.from(element.attributes)
+                .some(attr => attr.name === 'act' || attr.name.startsWith('act@'));
+            if (!element.hasAttribute('act-block') && !hasEventAttribute) {
                 element.setAttribute('act', '');
             }
 
-            this.bindAttributes(element, binding, 'inlineScript');
+            this.bindAttributes(element, binding, Source.TYPE.INLINE_SCRIPT);
         },
 
-        bindAttributes(element, binding, type = 'directAttribute') {
+        bindAttributes(element, binding, type = Source.TYPE.ATTRIBUTE) {
             for (const attr of element.attributes) {
                 if (!this.ATTRIBUTES.includes(attr.name) && !attr.name.startsWith('act@')) continue;
                 this.bindSource(binding, new Source(attr, type));
@@ -2581,7 +1888,7 @@
         },
 
         bindSource(binding, source) {
-            if (source.attr.name == 'act-block') return this.bindBlock(binding, source);
+            if (source.attr.name === 'act-block') return this.bindBlock(binding, source);
             this.bindEvents(binding, source);
         },
 
@@ -2591,27 +1898,65 @@
             binding.blocks[blockName] = source;
         },
 
-        bindEvents(binding, source) {
-            source.attr.name.replace('act@', '').split(',').forEach(evt => {
-                const opts = {};
-                this.EVENT_OPTIONS.forEach(eo => { 
-                    if (evt.includes(':' + eo)) { 
-                        opts[eo] = true; 
-                        evt = evt.replace(':' + eo, ''); 
-                    } 
-                });
+        readName(spec, fromIndex) {
+            if (spec[fromIndex] !== '[') {
+                let to = fromIndex;
+                while (to < spec.length && !Object.hasOwn(this.PART_SIGILS, spec[to]) && spec[to] !== '[') to++;
+                return { value: spec.slice(fromIndex, to), next: to };
+            }
 
-                let match, alias = null;
-                if (match = evt.match(/^([^\[]+)\[([^\]]+)\]$/)) {
-                    alias = match[1]; 
-                    evt = match[2];
+            const close = spec.indexOf(']', fromIndex);
+            return close === -1 ? null : { value: spec.slice(fromIndex + 1, close), next: close + 1 };
+        },
+
+        parseEventSpec(spec) {
+            const options = {}, keyModifiers = [];
+            let alias = null;
+            const event = this.readName(spec, 0);
+
+            if (!event) return { error: `Unclosed "[" in "act@${spec}".` };
+            if (!event.value) return { error: `Missing event name in "act@${spec}".` };
+
+            let at = event.next;
+            while (at < spec.length) {
+                const part = this.PART_SIGILS[spec[at]];
+                if (!part) return { error: `Unexpected "${spec[at]}" in "act@${spec}". Expected ":", "." or "#".` };
+
+                const name = this.readName(spec, at + 1);
+                if (!name) return { error: `Unclosed "[" in "act@${spec}".` };
+                if (!name.value) return { error: `Empty ${part} after "${spec[at]}" in "act@${spec}".` };
+
+                if (part === 'key') {
+                    keyModifiers.push(name.value.toLowerCase());
+                } else if (part === 'alias') {
+                    alias = name.value;
+                } else if (this.EVENT_OPTIONS.includes(name.value)) {
+                    options[name.value] = true;
+                } else {
+                    return { error: `Unknown event option ":${name.value}" in "act@${spec}". If it is part of a name, wrap the name in brackets: act@[${event.value}:${name.value}]` };
                 }
 
-                const [name, ...mods] = evt.split('.');
-                if (mods.length) opts.modifiers = mods.map(m => m.toLowerCase());
+                at = name.next;
+            }
 
-                binding.addEvent(name, source, opts, null, alias);
-            });
+            if (keyModifiers.length) options.modifiers = keyModifiers;
+            return { event: event.value, alias, options };
+        },
+
+        bindEvents(binding, source) {
+            for (const spec of source.attr.name.replace('act@', '').split(',')) {
+                const { event, alias, options, error } = this.parseEventSpec(spec);
+
+                if (error) {
+                    console.error(
+                        `💣 act: ${error}\nin attribute "${source.attr.name}" of element`,
+                        source.attr.ownerElement,
+                    );
+                    continue;
+                }
+
+                binding.addEvent(event, source, options, null, alias);
+            }
         },
 
         scan(root, bindRoot = true, force = false) {
@@ -2622,17 +1967,17 @@
                 './/script[@type = "text/act"] | .//*[@act] | .//*[@*[starts-with(name(), "act@")]]',
             ).evaluate(root, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
-            const bindedNodes = [];
+            const boundNodes = [];
 
             for (let i = 0; i < xpath.snapshotLength; i++) {
                 const node = xpath.snapshotItem(i);
                 if (!this.from(node) || force) {
                     this.bind(node);
-                    bindedNodes.push(node);
+                    boundNodes.push(node);
                 }
             }
 
-            return bindedNodes;
+            return boundNodes;
         }
     };
 
@@ -2645,28 +1990,30 @@
         constructor(element) {
             this.element = element;
             this.data = {};
-            Object.defineProperty(element, Binder.PROP, { value: this, writable: true, configurable: true });
+            Object.defineProperty(element, Binder.BINDING_PROPERTY, { value: this, writable: true, configurable: true });
         }
 
-        #addIntersectObserver(eventName, options, eventManager = null) {
+        #observeIntersections(eventName, options, eventManager = null) {
             const observerOptions = {}, element = this.element, matchingSelector = options.matchingSelector;
 
             if (options.threshold) observerOptions.threshold = options.threshold;
             if (is(options.root, Element)) observerOptions.root = options.root;
             observerOptions.rootMargin = (options?.rootMargin?.toString() || options?.root_margin?.toString());
 
-            const observeElements = matchingSelector ? Array.from(element.querySelectorAll(matchingSelector)) : [element];
+            const observed = matchingSelector ? Array.from(element.querySelectorAll(matchingSelector)) : [element];
             const intersectionObserver = new IntersectionObserver(function (entries) {
-                for (const entry of entries) if (entry.isIntersecting === (eventName == Binder.INTERSECT_EVENTS.inview)) {
+                for (const entry of entries) if (entry.isIntersecting === (eventName === Binder.INTERSECT_EVENTS.inview)) {
                     if (options.once) this.disconnect();
+
                     const event = new CustomEvent(eventName, { detail: { entry, matchedElement: entry.target } });
                     element.dispatchEvent(event);
                     if (matchingSelector && eventManager) eventManager.run(entry.target, event);
+
                     if (options.once) break;
                 }
             }, observerOptions);
 
-            for (const el of observeElements) intersectionObserver.observe(el);
+            for (const el of observed) intersectionObserver.observe(el);
 
             let mutationObserver = null;
             if (matchingSelector) {
@@ -2687,11 +2034,15 @@
 
         addEvent(eventName, source, options = {}, eventManager = null, eventAlias = null) {
             if (eventAlias === null) eventAlias = eventName;
-            if (Object.keys(Binder.INTERSECT_EVENTS).includes(eventName)) {
+            const isIntersectionEvent = Object.hasOwn(Binder.INTERSECT_EVENTS, eventName);
+
+            if (isIntersectionEvent) {
                 eventName = Binder.INTERSECT_EVENTS[eventName];
                 if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
-                eventManager.observer = this.#addIntersectObserver(eventName, options, eventManager);
-                if (options.matchingSelector) {
+                eventManager.observer = this.#observeIntersections(eventName, options, eventManager);
+
+                const dispatchedByTheObserverItself = Boolean(options.matchingSelector);
+                if (dispatchedByTheObserverItself) {
                     this.events[eventAlias] = eventManager;
                     return;
                 }
@@ -2700,14 +2051,17 @@
             if (!eventManager) eventManager = new EventManager(this, eventName, options, source, source.scope);
             this.events[eventAlias] = eventManager;
             this.element.addEventListener(eventName, eventManager.listener, options);
-            if ((eventName === 'act' || eventName === 'load') && Act.config.start) this.element.dispatchEvent(new Event(eventName, { bubbles: false }));
+
+            if ((eventName === 'act' || eventName === 'load') && Act.isStartingUp) {
+                this.element.dispatchEvent(new Event(eventName, { bubbles: false }));
+            }
         }
 
         parent() {
-            let parent = this.element;
-            while (parent = parent.parentNode) {
-                const b = Binder.from(parent);
-                if (b) return b;
+            let node = this.element;
+            while (node = node.parentNode) {
+                const binding = Binder.from(node);
+                if (binding) return binding;
             }
         }
 
@@ -2726,142 +2080,9 @@
         lookupData(key) {
             let binding = this;
             while (binding) {
-                if (Object.hasOwn(binding.data, key)) { return new Result(binding.data[key], binding, { parent: binding.data, key }); }
+                if (Object.hasOwn(binding.data, key)) return new Result(binding.data[key], binding, { parent: binding.data, key });
                 binding = binding.parent();
             }
-        }
-    }
-
-    class EventManager {
-        binding;
-        name;
-        options;
-        source;
-        scope;
-
-        lock = false;
-        halt = false;
-
-        constructor(binding, name, options, source, scope) {
-            this.binding = binding;
-            this.name = name;
-            this.options = options;
-            this.scope = scope;
-            this.source = source;
-            this.contexts = new Set;
-
-            this.listener = (ev) => {
-                const mods = this.options.modifiers;
-                if (mods) {
-                    if (['shift', 'ctrl', 'alt', 'meta'].some(k => (mods.includes(k) || (k === 'ctrl' && mods.includes('control'))) && !ev[k + 'Key'])) return;
-                    const keys = mods.filter(m => !['shift', 'ctrl', 'control', 'alt', 'meta'].includes(m));
-                    if (keys.length && (!ev.key || !keys.includes(ev.key.toLowerCase()))) return;
-                }
-                if (this.options.prevent) ev.preventDefault();
-                if (this.options.stop) ev.stopPropagation();
-                if (this.options.only) ev.stopImmediatePropagation();
-                return this.run(this.options.target ? ev.target : this.binding.element, ev);
-            };
-        }
-
-        async run(target, event = null) {
-            if (this.lock) return;
-            const context = new Context(target, this.binding, event, this, this.source);
-
-            target.dispatchEvent(new CustomEvent('actstart', {
-                bubbles: true,
-                detail: { event, source: this.source, eventManager: this },
-            }));
-
-            try {
-                this.attach(context);
-                context.scopeData(this.scope).event = event;
-                return await context.solve(this.scope, target, {});
-            } catch (e) {
-                if (is(e, Signal.Halt, Signal.Stop)) return e.data;
-                if (is(e, ActRuntimeError) && e.actTrace?.length) {
-                    const expr = e.expression;
-                    const originalError = e.actException ?? e;
-                    const initialTrace = e.actTrace[0];
-
-                    console.error('%c💣 act Runtime Error', 'font-weight: bold; font-size: 1.2em;');
-                    console.group(`%c${originalError.constructor.name}%c${originalError.message ? ': ' + originalError.message : ''}`,
-                        'background: rgba(255, 0, 0, 0.1); font-weight: bold; padding: 2px 4px;',
-                        'background: rgba(255, 0, 0, 0.1); padding: 2px 4px;'
-                    );
-
-                    console.log(
-                        'At line', expr.tokenStart.line, 'Column', expr.tokenStart.column,
-                        `\nOn event: '${initialTrace.context.event?.type ?? 'unknown'}'`, initialTrace.context.event,
-                        '\nFrom event manager:', initialTrace.context.eventManager,
-                        `\nSource: ${initialTrace.sentence.source.type}`, initialTrace.sentence.source,
-                        '\nElement binding:', initialTrace.context.binding.element,
-                    );
-
-                    console.group('Stack trace');
-                    for (const entry of e.actTrace) {
-                        const s = entry.sentence, codeLines = s.code.split('\n'), firstLine = codeLines[0], hasMoreLines = codeLines.length > 1;
-                        const beforeError = firstLine.substring(0, expr.tokenStart.index - s.tokenStart.index);
-                        const errorPart = firstLine.substring(expr.tokenStart.index - s.tokenStart.index, expr.tokenEnd.indexEnd - s.tokenStart.index);
-                        const afterError = firstLine.substring(expr.tokenEnd.indexEnd - s.tokenStart.index);
-
-                        if (expr && errorPart) {
-                            console.groupCollapsed(
-                                `%cLine ${s.tokenStart.line}:\n%c ${beforeError}%c${errorPart}%c${afterError}${hasMoreLines ? '%c ...' : ''}`,
-                                'color: gray;', '', 'background: rgba(255, 0, 0, 0.2); font-weight: bold; padding: 1px 4px; border-radius: 4px; border: 1px solid rgba(255, 0, 0, 0.3);', '',
-                                ...(hasMoreLines ? ['color: gray; font-style: italic;'] : []),
-                            );
-                        } else {
-                            console.groupCollapsed(
-                                `%cLine ${s.tokenStart.line}:\n%c ${firstLine.trim()}${hasMoreLines ? '%c ...' : ''}`,
-                                'color: gray;', '',
-                                ...(hasMoreLines ? ['color: gray; font-style: italic;'] : []),
-                            );
-                        }
-
-                        console.log(
-                            'Sentence details:\n',
-                            '\nTarget:\n', s.target,
-                            '\nComputed sentence target:\n', entry.sentenceTarget,
-                            '\nSource:\n', s.source,
-                            '\nSentence object:\n', s,
-                            '\nFull code:\n\n' + s.code,
-                        );
-                        console.groupEnd();
-                    }
-                    console.groupEnd();
-
-                    console.groupCollapsed('Full trace data');
-                    console.log(e.actTrace);
-                    console.groupEnd();
-
-                    console.groupCollapsed('JavaScript Exception');
-                    console.error(e.actException);
-                    console.groupEnd();
-                    
-                    console.groupEnd();
-                }
-
-                target.dispatchEvent(new CustomEvent('acterror', {
-                    bubbles: true,
-                    detail: { error: e, event, source: this.source, eventManager: this },
-                }));
-            } finally {
-                this.detach(context);
-                target.dispatchEvent(new CustomEvent('actend', {
-                    bubbles: true,
-                    detail: { event, source: this.source, eventManager: this },
-                }));
-            }
-        }
-
-        attach(context) {
-            this.contexts.add(context);
-        }
-
-        detach(context) {
-            this.contexts.delete(context);
-            if (this.contexts.size === 0) this.halt = false;
         }
     }
 
@@ -2871,34 +2092,53 @@
         event;
         eventManager;
         source;
+        abortSignal;
+        abortPromise;
+        abortController;
+        finishing = false;
 
-        constructor(defaultTarget, binding, event, eventManager, source) {
+        #ignoreUnhandledRejection(promise) {
+            promise.catch(() => { });
+            return promise;
+        }
+
+        constructor(defaultTarget, binding, event, eventManager, source, abortSignal) {
             this.target = defaultTarget;
             this.binding = binding;
             this.event = event;
             this.eventManager = eventManager;
             this.source = source;
             this.data = new WeakMap;
+            this.abortSignal = abortSignal;
+
+            this.abortPromise = new Promise((_, reject) =>
+                abortSignal.addEventListener('abort', () => reject(new Signal.Halt))
+            );
+            this.#ignoreUnhandledRejection(this.abortPromise);
         }
 
         async solve(value, target, opts) {
-            if (this.eventManager.halt) throw new Signal.Halt;
+            if (this.abortSignal.aborted) throw new Signal.Halt;
             if (!is(value, Solvable, List)) return value;
-            return await value.solve(this, target, opts);
+            return await this.#raceAgainstKill(value.solve(this, target, opts));
+        }
+
+        #raceAgainstKill(work) {
+            return Promise.race([work, this.abortPromise]);
         }
 
         async solveAll(values, target, opts) {
             if (is(values, List)) return await values.solve(this, target, opts);
-            
-            const result = [];
+
+            const results = [];
             for (const value of values) {
                 if (is(value, Spread)) {
-                    result.push(...await this.solve(value, target, opts));
+                    results.push(...await this.solve(value, target, opts));
                 } else {
-                    result.push(await this.solve(value, target, opts));
+                    results.push(await this.solve(value, target, opts));
                 }
             }
-            return result;
+            return results;
         }
 
         async asString(value, target, opts) {
@@ -2916,9 +2156,1029 @@
         }
 
         spawn() {
-            return new Context(this.target, this.binding, this.event, this.eventManager, this.source);
+            return new Context(this.target, this.binding, this.event, this.eventManager, this.source, this.abortSignal);
         }
     }
+
+    class EventManager {
+        static LIFECYCLE_EVENTS = ['actstart', 'actend', 'acterror'];
+        static META_MODIFIER_KEYS = ['shift', 'ctrl', 'alt', 'meta'];
+
+        binding;
+        name;
+        options;
+        source;
+        scope;
+
+        lock = false;
+        contexts = new Set;
+
+        constructor(binding, name, options, source, scope) {
+            this.binding = binding;
+            this.name = name;
+            this.options = options;
+            this.scope = scope;
+            this.source = source;
+
+            this.listener = (event) => {
+                if (this.options.modifiers && !this.#modifiersMatch(event, this.options.modifiers)) return;
+                if (this.options.prevent) event.preventDefault();
+                if (this.options.stop) event.stopPropagation();
+                if (this.options.only) event.stopImmediatePropagation();
+                return this.run(this.options.target ? event.target : this.binding.element, event);
+            };
+        }
+
+        #modifiersMatch(event, modifiers) {
+            const isMetaKeyRequired = (metaKey) => modifiers.includes(metaKey) || (metaKey === 'ctrl' && modifiers.includes('control'));
+            const isMetaKeyHeld = (metaKey) => event[metaKey + 'Key'];
+            const everyRequiredMetaKeyHeld = EventManager.META_MODIFIER_KEYS.every(
+                metaKey => !isMetaKeyRequired(metaKey) || isMetaKeyHeld(metaKey)
+            );
+
+            if (!everyRequiredMetaKeyHeld) return false;
+
+            const pressedKey = event.key?.toLowerCase();
+            const requiredLiteralKeys = modifiers.filter(
+                modifier => !EventManager.META_MODIFIER_KEYS.includes(modifier) && modifier !== 'control'
+            );
+
+            return requiredLiteralKeys.length === 0 || requiredLiteralKeys.includes(pressedKey);
+        }
+
+        #dispatchLifecycle(target, name, event, detail = {}) {
+            if (EventManager.LIFECYCLE_EVENTS.includes(this.name)) return;
+            target.dispatchEvent(new CustomEvent(name, {
+                bubbles: true,
+                detail: { event, source: this.source, eventManager: this, ...detail },
+            }));
+        }
+
+        async run(target, event = null) {
+            if (this.lock) return;
+
+            const abortController = new AbortController();
+            const context = new Context(target, this.binding, event, this, this.source, abortController.signal);
+            context.abortController = abortController;
+            this.contexts.add(context);
+
+            this.#dispatchLifecycle(target, 'actstart', event);
+
+            try {
+                context.scopeData(this.scope).event = event;
+                return await context.solve(this.scope, target, {});
+            } catch (error) {
+                if (is(error, Signal.Halt, Signal.Stop)) return error.data;
+                if (is(error, ActRuntimeError) && error.actTrace?.length) this.#reportRuntimeError(error);
+                this.#dispatchLifecycle(target, 'acterror', event, { error });
+            } finally {
+                this.contexts.delete(context);
+                this.#dispatchLifecycle(target, 'actend', event);
+            }
+        }
+
+        #reportRuntimeError(error) {
+            const expression = error.expression;
+            const originalError = error.actException ?? error;
+            const initialTrace = error.actTrace[0];
+
+            console.error('%c💣 act Runtime Error', 'font-weight: bold; font-size: 1.2em;');
+            console.group(`%c${originalError.constructor.name}%c${originalError.message ? ': ' + originalError.message : ''}`,
+                'background: rgba(255, 0, 0, 0.1); font-weight: bold; padding: 2px 4px;',
+                'background: rgba(255, 0, 0, 0.1); padding: 2px 4px;'
+            );
+
+            console.log(
+                'At line', expression.tokenStart.line, 'Column', expression.tokenStart.column,
+                `\nOn event: '${initialTrace.context.event?.type ?? 'unknown'}'`, initialTrace.context.event,
+                '\nFrom event manager:', initialTrace.context.eventManager,
+                `\nSource: ${initialTrace.sentence.source.type}`, initialTrace.sentence.source,
+                '\nElement binding:', initialTrace.context.binding.element,
+            );
+
+            console.group('Stack trace');
+            for (const entry of error.actTrace) {
+                const sentence = entry.sentence;
+                const codeLines = sentence.code.split('\n'), firstLine = codeLines[0], hasMoreLines = codeLines.length > 1;
+
+                const beforeError = firstLine.substring(0, expression.tokenStart.index - sentence.tokenStart.index);
+                const errorPart = firstLine.substring(expression.tokenStart.index - sentence.tokenStart.index, expression.tokenEnd.indexEnd - sentence.tokenStart.index);
+                const afterError = firstLine.substring(expression.tokenEnd.indexEnd - sentence.tokenStart.index);
+
+                if (expression && errorPart) {
+                    console.groupCollapsed(
+                        `%cLine ${sentence.tokenStart.line}:\n%c ${beforeError}%c${errorPart}%c${afterError}${hasMoreLines ? '%c ...' : ''}`,
+                        'color: gray;', '', 'background: rgba(255, 0, 0, 0.2); font-weight: bold; padding: 1px 4px; border-radius: 4px; border: 1px solid rgba(255, 0, 0, 0.3);', '',
+                        ...(hasMoreLines ? ['color: gray; font-style: italic;'] : []),
+                    );
+                } else {
+                    console.groupCollapsed(
+                        `%cLine ${sentence.tokenStart.line}:\n%c ${firstLine.trim()}${hasMoreLines ? '%c ...' : ''}`,
+                        'color: gray;', '',
+                        ...(hasMoreLines ? ['color: gray; font-style: italic;'] : []),
+                    );
+                }
+
+                console.log(
+                    'Sentence details:\n',
+                    '\nTarget:\n', sentence.target,
+                    '\nComputed sentence target:\n', entry.sentenceTarget,
+                    '\nSource:\n', sentence.source,
+                    '\nSentence object:\n', sentence,
+                    '\nFull code:\n\n' + sentence.code,
+                );
+                console.groupEnd();
+            }
+            console.groupEnd();
+
+            console.groupCollapsed('Full trace data');
+            console.log(error.actTrace);
+            console.groupEnd();
+
+            console.groupCollapsed('JavaScript Exception');
+            console.error(error.actException);
+            console.groupEnd();
+
+            console.groupEnd();
+        }
+    }
+
+    const Library = {
+        method(fn) {
+            fn[ACT_FUNCTION] = true;
+            return fn;
+        },
+
+        get(name, target) {
+            const primitiveTypeMethods = this[typeof target];
+
+            if (is(target, Element) && Object.hasOwn(this.Element, name)) return this.Element[name];
+            if (Array.isArray(target) && Object.hasOwn(this.Array, name)) return this.Array[name];
+            if (Object.hasOwn(primitiveTypeMethods, name)) return primitiveTypeMethods[name];
+            if (Object.hasOwn(this.globals, name)) return this.globals[name];
+        },
+
+        async exec(fn, args, target, context, opts) {
+            if (is(fn, Result)) return await this.exec(fn.value, args, fn.parent, fn.context || context, opts);
+            if (isActFunction(fn)) return await fn(context, target, opts, ...args);
+            if (is(fn, Function)) return await resolveAbortable(context, fn.call(target, ...await context.solveAll(args, target)));
+        },
+    };
+
+    Library.words = {
+        me: (ctx, target) => target,
+        source_element: (ctx) => ctx.binding.element,
+        original_target: (ctx) => ctx.target,
+        undefined: () => undefined,
+        NaN: () => NaN,
+        debugger: () => { debugger; },
+        true: () => true,
+        false: () => false,
+        null: () => null,
+        document: () => document,
+        window: () => window,
+        js: () => window,
+        Act: () => Act,
+    };
+
+    Library.prefixes = {
+        async first(ctx, target, opts, value) {
+            return (await ctx.asValueOf(value, target, opts))[0];
+        },
+
+        async last(ctx, target, opts, value) {
+            const collection = await ctx.asValueOf(value, target, opts);
+            return collection[collection.length - 1];
+        },
+
+        global(ctx, target, opts, value) {
+            return new Result(Act.globals[value.value], this, { parent: Act.globals, key: value.value });
+        },
+
+        local(ctx, target, opts, value) {
+            const data = Binder.ensure(target).data;
+            return new Result(data[value.value], this, { parent: data, key: value.value });
+        },
+
+        scoped(ctx, target, opts, value) {
+            const data = ctx.scopeData(this.scope);
+            return new Result(data[value.value], this, { parent: data, key: value.value });
+        },
+
+        async not(ctx, target, opts, value) {
+            return !(await ctx.asValueOf(value, target));
+        },
+
+        async negative(ctx, target, opts, value) {
+            return -(await ctx.asValueOf(value, target));
+        },
+
+        async type(ctx, target, opts, value) {
+            const solved = await ctx.solve(value, target, opts);
+            return from(solved)?.constructor.name || typeof unwrap(solved);
+        },
+
+        async wat(ctx, target, opts, value) {
+            const result = await ctx.solve(value, target, opts);
+            console.log(
+                '🤷 Act WAT?\n',
+                'Value:', value, '\n',
+                'Result:', result, '\n',
+                'Unwrapped Result:', unwrap(result), '\n',
+                'Target:', target, '\n',
+                'Scope:', this.scope, '\n',
+                'Context:', ctx, '\n',
+                'Code:', value.code, '\n'
+            );
+
+            return result;
+        },
+    };
+
+    const findEventManager = async (ctx, target, name) => {
+        const binding = Binder.from(target);
+        return binding ? binding.events[Binder.eventName(await ctx.asString(name, target))] : null;
+    };
+
+    Library.keywords = {
+        async case(ctx, target, opts, [value, ...args]) {
+            const testValue = await ctx.asValueOf(value, target, opts);
+
+            for (let i = 0; i < args.length; i++) {
+                const clause = args[i];
+                if (!is(clause, Word)) return;
+
+                if (clause.value === 'when') {
+                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
+                    const branch = args[++i];
+                    if (testValue === matchValue) return await ctx.solve(branch, target, opts);
+                } else if (clause.value === 'like') {
+                    const matchValue = await ctx.asValueOf(args[++i], target, opts);
+                    const branch = args[++i];
+                    if (looselyEquals(testValue, matchValue)) return await ctx.solve(branch, target, opts);
+                } else if (clause.value === 'else') {
+                    return await ctx.solve(args[++i], target, opts);
+                }
+            }
+        },
+
+        async run(ctx, target, opts, [name, ...args]) {
+            name = await ctx.asString(name, target);
+
+            let fromElement = null;
+            if (args[0]?.toString() === 'from') {
+                fromElement = unwrap(await ctx.solve(args[1], target, opts));
+                if (!is(fromElement, Element) && is(fromElement?.[0], Element)) fromElement = fromElement[0];
+                if (!is(fromElement, Element)) throw new ActError(`'from' element for block '${name}' not found.`);
+                args = args.slice(2);
+            }
+
+            const block = fromElement
+                ? Binder.ensure(fromElement).getBlock(name)
+                : ctx.binding.getBlock(name) ?? (is(target, Element) ? Binder.ensure(target).getBlock(name) : undefined);
+            if (!block) throw new ActError(`Block '${name}' not found.`);
+
+            const data = ctx.scopeData(block.scope);
+            data.__callerScope__ = this.scope;
+
+            const solvedArgs = await ctx.solveAll(args, target, opts);
+            for (let i = 0; i < block.args.length; i++) {
+                const parameter = block.args[i];
+                if (Array.isArray(parameter)) {
+                    data[parameter[0]] = solvedArgs.slice(i);
+                    break;
+                }
+
+                data[parameter] = solvedArgs[i];
+            }
+
+            return await ctx.solve(block.scope, target, opts);
+        },
+
+        async def(ctx, target, opts, args) {
+            const name = await ctx.asString(args[0], target, opts);
+            const body = args[args.length - 1];
+            const parameters = args.slice(1, -1).map(arg => is(arg, List) ? [arg.value[0].value] : arg.value);
+
+            Binder.ensure(target).blocks[name] = { args: parameters, scope: body };
+        },
+
+        async each(ctx, target, opts, args) {
+            let iterable = target, body = args[0], valueName, keyName;
+
+            if (is(args[1], Word) && args[1].value === 'in') {
+                valueName = args[0].value;
+                iterable = await ctx.asValueOf(args[2], target);
+                body = args[3];
+            } else if (is(args[2], Word) && args[2].value === 'in') {
+                keyName = args[0].value;
+                valueName = args[1].value;
+                iterable = await ctx.asValueOf(args[3], target);
+                body = args[4];
+            }
+
+            const entries = keyName ? Object.entries(iterable) : iterable;
+
+            for (const entry of entries) {
+                if (keyName) {
+                    ctx.scopeData(body)[keyName] = entry[0];
+                    ctx.scopeData(body)[valueName] = entry[1];
+                } else if (valueName) {
+                    ctx.scopeData(body)[valueName] = new Result(entry, this);
+                }
+
+                try {
+                    await ctx.solve(body, keyName ? iterable : (valueName ? target : entry), opts);
+                } catch (error) {
+                    if (is(error, Signal.Break)) return error.data;
+                    if (is(error, Signal.Continue)) continue;
+                    throw error;
+                }
+            }
+        },
+
+        async for(ctx, target, opts, args) {
+            const name = args[0].value;
+            let position = 1, start = 0;
+
+            if (args[position]?.value === 'from') {
+                start = await ctx.asValueOf(args[2], target);
+                position += 2;
+            }
+
+            if (args[position].value !== 'to') throw new ActError('Invalid for loop syntax: missing "to" word.');
+
+            const end = await ctx.asValueOf(args[position + 1], target);
+            position += 2;
+
+            let step = 1, stepDefined = false;
+            if (args[position]?.value === 'step') {
+                step = await ctx.asValueOf(args[position + 1], target);
+                stepDefined = true;
+            }
+
+            const body = args.at(-1), ascending = (start <= end);
+            if (!stepDefined) step = ascending ? 1 : -1;
+
+            for (let i = start; ascending ? i <= end : i >= end; i += step) {
+                try {
+                    ctx.scopeData(body)[name] = i;
+                    await ctx.solve(body, target);
+                } catch (error) {
+                    if (is(error, Signal.Break)) return error.data;
+                    if (is(error, Signal.Continue)) continue;
+                    throw error;
+                }
+            }
+        },
+
+        async if(ctx, target, opts, [condition, thenBranch, elseWord, elseBranch]) {
+            if (await ctx.asValueOf(condition, target)) return await ctx.solve(thenBranch, target, opts);
+            if (await ctx.asString(elseWord, target) === 'else') return await ctx.solve(elseBranch, target, opts);
+        },
+
+        async loop(ctx, target, opts, [body]) {
+            for (;;) {
+                try {
+                    await ctx.solve(body, target, opts);
+                } catch (error) {
+                    if (is(error, Signal.Break)) return error.data;
+                    if (is(error, Signal.Continue)) continue;
+                    throw error;
+                }
+            }
+        },
+
+        async new(ctx, target, opts, [constructor, ...args]) {
+            if (is(constructor, Tag)) return document.createElement(constructor.value);
+
+            const Constructor = await ctx.asValueOf(constructor, target);
+            args = await ctx.solveAll(args, target, opts);
+
+            try {
+                return new Constructor(...args);
+            } catch (error) {
+                return new window[Constructor.toString()](...args);
+            }
+        },
+
+        async on(ctx, target, opts, [eventNameOrAlias, ...args]) {
+            target = await ctx.asValueOf(target);
+            let eventName, alias;
+
+            if (is(eventNameOrAlias, ActObject)) {
+                const aliasObject = await ctx.asValueOf(eventNameOrAlias, target);
+                alias = Object.keys(aliasObject)[0];
+                eventName = Binder.eventName(aliasObject[alias].toString());
+            } else {
+                eventName = Binder.eventName(await ctx.asString(eventNameOrAlias, target));
+            }
+
+            let options = {}, matchingSelector = null;
+            const body = args.at(-1);
+
+            for (let i = 0; i < args.length - 1; i++) {
+                const arg = args[i];
+                if (is(arg, ActObject)) {
+                    Object.assign(options, await ctx.asValueOf(arg, target));
+                } else if (arg.toString() === 'matching') {
+                    matchingSelector = await ctx.asString(args[++i], target);
+                } else if (Binder.EVENT_OPTIONS.includes(arg.toString())) {
+                    options[arg.toString()] = true;
+                }
+            }
+
+            const binding = Binder.ensure(target);
+            const eventManager = new EventManager(binding, eventName, options, body.source, body);
+            const isIntersectEvent = Object.hasOwn(Binder.INTERSECT_EVENTS, eventName);
+
+            if (matchingSelector) {
+                if (isIntersectEvent) {
+                    options.matchingSelector = matchingSelector;
+                } else {
+                    eventManager.listener = (event) => {
+                        let element = event.target;
+                        while (element && element !== target) {
+                            if (element.matches(matchingSelector)) return eventManager.run(element, event);
+                            element = element.parentElement;
+                        }
+                        if (target.matches(matchingSelector) && element === target) return eventManager.run(target, event);
+                    };
+                }
+            }
+
+            binding.addEvent(eventName, body.source, options, eventManager, alias);
+            return true;
+        },
+
+        async off(ctx, target, opts, [eventName]) {
+            target = await ctx.asValueOf(target);
+            const binding = Binder.from(target);
+            if (!binding) return false;
+
+            eventName = Binder.eventName(await ctx.asString(eventName, target));
+            const eventManager = binding.events[eventName];
+            if (!eventManager) return false;
+
+            eventManager.observer?.intersectionObserver?.disconnect();
+            eventManager.observer?.mutationObserver?.disconnect();
+            binding.element.removeEventListener(eventManager.name, eventManager.listener);
+            delete binding.events[eventName];
+            return true;
+        },
+
+        async kill(ctx, target, opts, [eventName]) {
+            target = await ctx.asValueOf(target);
+            if (!is(target, Element)) return false;
+
+            const eventManager = await findEventManager(ctx, target, eventName);
+            if (!eventManager || eventManager.contexts.size === 0) return false;
+
+            for (const context of eventManager.contexts) context.abortController.abort();
+            return true;
+        },
+
+        async finish(ctx, target, opts, [eventName]) {
+            target = await ctx.asValueOf(target);
+            if (!is(target, Element)) return false;
+
+            const eventManager = await findEventManager(ctx, target, eventName);
+            if (!eventManager || eventManager.contexts.size === 0) return false;
+
+            for (const context of eventManager.contexts) context.finishing = true;
+            return true;
+        },
+
+        async wait_until(ctx, target, opts, [eventName]) {
+            const name = await ctx.asString(eventName, target);
+            const element = unwrap(target);
+
+            let listener;
+            const promise = new Promise(resolve => {
+                listener = event => resolve(event);
+                element.addEventListener(name, listener, { once: true });
+            });
+
+            ctx.abortSignal.addEventListener('abort', () => element.removeEventListener(name, listener), { once: true });
+            return promise;
+        },
+
+        async break(ctx, target, opts, [data]) {
+            const signal = new Signal.Break;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
+        },
+
+        async stop(ctx, target, opts, [data]) {
+            const signal = new Signal.Stop;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
+        },
+
+        async return(ctx, target, opts, [data]) {
+            const signal = new Signal.Return;
+            if (data !== undefined) signal.data = await ctx.solve(data, target, opts);
+            throw signal;
+        },
+
+        repeat() { throw new Signal.Repeat; },
+        restart() { throw new Signal.Restart; },
+        continue() { throw new Signal.Continue; },
+        halt() { throw new Signal.Halt; },
+
+        async throw(ctx, target, opts, [error]) {
+            if (is(error, Error)) throw error;
+            throw new ActError(await ctx.asValueOf(error, target));
+        },
+
+        async while(ctx, target, opts, [condition, body]) {
+            while (await ctx.asValueOf(condition, target)) {
+                try {
+                    await ctx.solve(body, target, opts);
+                } catch (error) {
+                    if (is(error, Signal.Break)) return error.data;
+                    if (is(error, Signal.Continue)) continue;
+                    throw error;
+                }
+            }
+        },
+
+        async with(ctx, target, opts, [object, body]) {
+            const withTarget = await ctx.solve(object, target, opts);
+            return await ctx.solve(body, unwrap(withTarget), opts);
+        },
+
+        async debounce(ctx, target, opts, [time, body]) {
+            clearTimeout(body.__debounceTimeout__ || 0);
+            body.__haltSupersededRun__?.();
+
+            const ms = Library.globals.time_to_ms(await ctx.solve(time, target, opts));
+
+            return new Promise((resolve, reject) => {
+                body.__haltSupersededRun__ = () => reject(new Signal.Halt);
+                body.__debounceTimeout__ = setTimeout(() => {
+                    delete body.__haltSupersededRun__;
+                    delete body.__debounceTimeout__;
+                    ctx.solve(body, target, opts).then(resolve, reject);
+                }, ms);
+            });
+        },
+
+        async lock(ctx, target, opts, args) {
+            if (args.length === 0) return ctx.eventManager.lock = true;
+
+            const first = await ctx.asValueOf(args[0], target);
+            if (typeof first === 'boolean') return ctx.eventManager.lock = first;
+
+            const eventManager = await findEventManager(ctx, target, args[0]);
+            if (!eventManager) return null;
+            eventManager.lock = args[1] === undefined ? true : !!(await ctx.asValueOf(args[1], target));
+            return true;
+        },
+
+        async unlock(ctx, target, opts, args) {
+            if (args.length === 0) return !(ctx.eventManager.lock = false);
+
+            const eventManager = await findEventManager(ctx, target, args[0]);
+            if (eventManager === null) return null;
+            if (eventManager) eventManager.lock = false;
+            return true;
+        },
+
+        async is_locked(ctx, target, opts, args) {
+            if (args.length === 0) return ctx.eventManager.lock;
+            const eventManager = await findEventManager(ctx, target, args[0]);
+            return eventManager === null ? null : eventManager?.lock;
+        },
+    };
+
+    Library.globals = {
+        listens_to(eventName) {
+            const binding = Binder.from(this);
+            return binding && Object.hasOwn(binding.events, Binder.eventName(eventName?.toString() ?? ''));
+        },
+
+        is_running(eventName = null) {
+            const binding = Binder.from(this);
+            if (!binding) return null;
+
+            if (eventName === null) {
+                for (const eventManager of Object.values(binding.events)) {
+                    if (eventManager.contexts.size > 0) return true;
+                }
+                return false;
+            }
+
+            const eventManager = binding.events[Binder.eventName(eventName.toString())];
+            return eventManager ? eventManager.contexts.size : false;
+        },
+
+        async tick() {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+        },
+
+        wait(time) {
+            return new Promise(resolve => setTimeout(resolve, Library.globals.time_to_ms(time)));
+        },
+
+        log_raw: (...args) => console.log(...args),
+        log: (...args) => console.log(...unwrapAll(args)),
+        warn: (...args) => console.warn(...unwrapAll(args)),
+        error: (...args) => console.error(...unwrapAll(args)),
+
+        time_to_ms(time) {
+            if (typeof time === 'number') return time;
+
+            time = time.toString();
+            const unit = time.match(/[a-z]+$/)?.[0];
+            const value = parseFloat(time);
+
+            if (!unit) return isNaN(value) ? 0 : value;
+            return value * ({ ms: 1, s: 1000, m: 60000, h: 3600000 }[unit] || 1);
+        },
+
+        random(min, max) {
+            min = Number(min) || 0;
+            max = Number(max) || 0;
+            if (Number.isInteger(min) && Number.isInteger(max)) return Math.floor(Math.random() * (max - min + 1)) + min;
+            return Math.random() * (max - min) + min;
+        },
+    };
+
+    Library.Array = (() => {
+        const arrayMethod = (body) => Library.method(async (ctx, target, opts, fn) => {
+            fn = await ctx.solve(fn, target, opts);
+            const call = (index) => isActFunction(fn)
+                ? fn(ctx, target[index], opts, target[index], index, target)
+                : fn(target[index], index, target);
+            return body(target, call);
+        });
+
+        return {
+            map: arrayMethod((array, call) => Promise.all(array.map((_, i) => call(i)))),
+
+            filter: arrayMethod(async (array, call) => {
+                const keep = await Promise.all(array.map((_, i) => call(i)));
+                return array.filter((_, i) => keep[i]);
+            }),
+
+            for_each: arrayMethod(async (array, call) => {
+                for (let i = 0; i < array.length; i++) await call(i);
+            }),
+
+            find: arrayMethod(async (array, call) => {
+                for (let i = 0; i < array.length; i++) if (await call(i)) return array[i];
+            }),
+
+            find_index: arrayMethod(async (array, call) => {
+                for (let i = 0; i < array.length; i++) if (await call(i)) return i;
+                return -1;
+            }),
+
+            some: arrayMethod(async (array, call) => {
+                for (let i = 0; i < array.length; i++) if (await call(i)) return true;
+                return false;
+            }),
+
+            every: arrayMethod(async (array, call) => {
+                for (let i = 0; i < array.length; i++) if (!(await call(i))) return false;
+                return true;
+            }),
+        };
+    })();
+
+    const classifyClassOrAttribute = (source) => {
+        const origin = from(through(source));
+        const isClass = is(origin, ActClass);
+        const isAttribute = is(origin, Attribute);
+        return { isClass, isAttribute, name: isClass ? origin.value.slice(1) : origin.value };
+    };
+
+    const sanitizeHTML = (element, html) => {
+        if (!Act.config.sanitize) return html;
+        if (typeof Act.config.sanitizer === 'function') return Act.config.sanitizer(element, html);
+        throw new ActError('Act: sanitize is enabled but no sanitizer function provided. Set Act.config.sanitizer to a function that returns a sanitized string, or null if it handled insertion itself.');
+    };
+
+    const setHTML = (element, content, outer) => {
+        const value = unwrap(content);
+
+        if (is(value, Element, DocumentFragment)) {
+            outer ? element.replaceWith(value) : element.replaceChildren(value);
+        } else {
+            const sanitized = sanitizeHTML(element, value?.toString() ?? '');
+            if (!isNullish(sanitized)) outer ? element.outerHTML = sanitized : element.innerHTML = sanitized;
+        }
+
+        return element;
+    };
+
+    const insertContent = (element, content, position) => {
+        const value = unwrap(content);
+
+        if (is(value, Element, DocumentFragment)) {
+            position === 'afterbegin' ? element.insertBefore(value, element.firstChild) : element.appendChild(value);
+        } else {
+            const sanitized = sanitizeHTML(element, value);
+            if (!isNullish(sanitized)) element.insertAdjacentHTML(position, sanitized);
+        }
+
+        return element;
+    };
+
+    const moveContent = (nodes, target, position = 'beforeend') => {
+        target = unwrap(target);
+        if (typeof target === 'string') target = document.querySelector(target);
+        if (!target) return nodes;
+
+        const isCollection = is(nodes, DocumentFragment, HTMLCollection, NodeList) || Array.isArray(nodes);
+        const list = isCollection ? (nodes.childNodes ? Array.from(nodes.childNodes) : Array.from(nodes)) : [nodes];
+
+        const aliases = { before: 'beforebegin', prepend: 'afterbegin', append: 'beforeend', after: 'afterend', inside: 'innerhtml', replace: 'outerhtml' };
+        const key = position.toString().toLowerCase();
+        const mode = aliases[key] || key;
+
+        if (mode === 'innerhtml') target.innerHTML = '';
+
+        const parent = target.parentNode;
+        const operations = {
+            beforebegin: node => parent.insertBefore(node, target),
+            afterbegin: node => target.insertBefore(node, target.firstChild),
+            beforeend: node => target.appendChild(node),
+            afterend: node => parent.insertBefore(node, target.nextSibling),
+            innerhtml: node => target.appendChild(node),
+            outerhtml: node => parent.insertBefore(node, target),
+        };
+
+        const operation = operations[mode] || operations.beforeend;
+        const eachNodeLandsBeforeTheLast = mode === 'afterbegin';
+        if (eachNodeLandsBeforeTheLast) list.reverse();
+        for (const node of list) operation(node);
+        const replacesTargetItself = mode === 'outerhtml';
+        if (replacesTargetItself) target.remove();
+
+        return nodes;
+    };
+
+    const forceReflow = (element) => void element.offsetWidth;
+
+    const findSibling = (element, selector, forward) => {
+        if (!selector) return forward ? element.nextElementSibling : element.previousElementSibling;
+        if (is(selector, Element)) return selector;
+
+        if (is(selector, NodeList) || Array.isArray(selector)) {
+            const positionMask = forward ? Node.DOCUMENT_POSITION_FOLLOWING : Node.DOCUMENT_POSITION_PRECEDING;
+            if (forward) {
+                for (const node of selector)
+                    if (element.compareDocumentPosition(node) & positionMask) return node;
+            } else {
+                for (let i = selector.length - 1; i >= 0; i--)
+                    if (element.compareDocumentPosition(selector[i]) & positionMask) return selector[i];
+            }
+
+            return null;
+        }
+
+        const cssSelector = typeof selector === 'string' ? selector : selector.toString();
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+        walker.currentNode = element;
+
+        let node;
+        while (node = forward ? walker.nextNode() : walker.previousNode()) {
+            if (node.matches(cssSelector)) return node;
+        }
+
+        return null;
+    };
+
+    Library.Element = {
+        matches(selector) {
+            return this.matches(selector.toString());
+        },
+
+        hide() {
+            this.style.display = 'none';
+        },
+
+        show() {
+            this.style.display = '';
+        },
+
+        transition(...args) {
+            let css = '', totalWait = 0;
+            const targetStyles = {}, originalStyles = {};
+            const previousTransition = this.style.transition;
+
+            while (args.length) {
+                let duration = 0, timingFunction = '', delay = 0;
+                const property = args.shift().toString();
+
+                const next = () => args.shift().toString();
+                const capture = () => originalStyles[property] ??= this.style[property];
+                const handlers = {
+                    from: () => { capture(); this.style[property] = next(); },
+                    to: () => { capture(); targetStyles[property] = next(); },
+                    in: () => duration = Library.globals.time_to_ms(next()),
+                    using: () => timingFunction = next(),
+                    after: () => delay = Library.globals.time_to_ms(next()),
+                };
+                while (args.length && handlers[args[0]]) handlers[args.shift()]();
+
+                totalWait = Math.max(totalWait, delay + duration);
+                css += `${css ? ', ' : ''}${property} ${duration}ms${timingFunction ? ' ' + timingFunction : ''}${delay ? ' ' + delay + 'ms' : ''}`;
+            }
+
+            this.style.transition = css;
+            forceReflow(this);
+            Object.assign(this.style, targetStyles);
+
+            let timer;
+            return abortable({
+                perform: done => {
+                    timer = setTimeout(() => { this.style.transition = previousTransition; done(); }, totalWait);
+                },
+                abort: () => {
+                    clearTimeout(timer);
+                    this.style.transition = 'none';
+                    for (const property of Object.keys(originalStyles)) this.style[property] = originalStyles[property];
+                    forceReflow(this);
+                    this.style.transition = previousTransition;
+                },
+            });
+        },
+
+        move_to(element, position = 'beforeend') {
+            return moveContent(this, element, position);
+        },
+
+        empty() {
+            this.replaceChildren();
+        },
+
+        clone() {
+            return this.cloneNode(true);
+        },
+
+        prepend(content) {
+            return insertContent(this, content, 'afterbegin');
+        },
+
+        append(content) {
+            return insertContent(this, content, 'beforeend');
+        },
+
+        set_html(content) {
+            return setHTML(this, content, false);
+        },
+
+        set_outer_html(content) {
+            return setHTML(this, content, true);
+        },
+
+        fade(direction, time = 250, timing = 'linear') {
+            const animation = this.animate(
+                [{ opacity: direction === 'in' ? 0 : 1 }, { opacity: direction === 'in' ? 1 : 0 }],
+                { duration: Library.globals.time_to_ms(time), easing: timing, fill: 'forwards' }
+            );
+
+            return abortable({
+                perform: async () => {
+                    try {
+                        await animation.finished;
+                        this.style.opacity = direction === 'in' ? '1' : '0';
+                        animation.cancel();
+                    } catch {  }
+                },
+                abort: () => animation.cancel(),
+            });
+        },
+
+        is_in_view(partially = false) {
+            const { top, left, bottom, right } = this.getBoundingClientRect();
+            const { innerHeight: viewportHeight, innerWidth: viewportWidth } = window;
+
+            const fullyVisible = top >= 0 && left >= 0 && bottom <= viewportHeight && right <= viewportWidth;
+            if (fullyVisible || !partially) return fullyVisible;
+
+            const partiallyVisible = top < viewportHeight && bottom > 0 && left < viewportWidth && right > 0;
+            return partiallyVisible ? 'partially' : false;
+        },
+
+        next(selector) {
+            return findSibling(this, selector, true);
+        },
+
+        previous(selector) {
+            return findSibling(this, selector, false);
+        },
+
+        parent() {
+            return this.parentNode;
+        },
+
+        take(value, parent = this.parentNode) {
+            const { isClass, isAttribute, name } = classifyClassOrAttribute(value);
+
+            if (isClass) {
+                for (const element of unwrap(parent).querySelectorAll('.' + name)) {
+                    element.classList.remove(name);
+                }
+                this.classList.add(name);
+            } else if (isAttribute) {
+                let attributeValue = '';
+                for (const element of unwrap(parent).querySelectorAll(`[${name}]`)) {
+                    attributeValue = element.getAttribute(name);
+                    element.removeAttribute(name);
+                }
+                this.setAttribute(name, attributeValue);
+            } else {
+                throw new ActError('Invalid value');
+            }
+
+            return this;
+        },
+
+        toggle(value, force) {
+            const forcedState = force !== undefined ? unwrap(force) : undefined;
+
+            if (value !== undefined) {
+                const { isClass, isAttribute, name } = classifyClassOrAttribute(value);
+                if (isClass) return this.classList.toggle(name, forcedState);
+                if (isAttribute) return this.toggleAttribute(name, forcedState);
+            }
+
+            const show = forcedState ?? (this.style.display === 'none');
+            return show ? Library.Element.show.call(this) : Library.Element.hide.call(this);
+        },
+
+        add(...values) {
+            for (const value of values) {
+                const { isClass, isAttribute, name } = classifyClassOrAttribute(value);
+                if (isClass) this.classList.add(name);
+                else if (isAttribute) this.setAttribute(name, '');
+            }
+            return this;
+        },
+
+        has(value) {
+            const { isClass, isAttribute, name } = classifyClassOrAttribute(value);
+            if (isClass) return this.classList.contains(name);
+            if (isAttribute) return this.hasAttribute(name);
+            return this.matches(name);
+        },
+
+        remove(...values) {
+            if (values.length === 0) return this.parentNode?.removeChild(this);
+
+            for (const value of values) {
+                const { isClass, isAttribute, name } = classifyClassOrAttribute(value);
+                if (isClass) this.classList.remove(name);
+                else if (isAttribute) this.removeAttribute(name);
+            }
+            return this;
+        },
+    };
+
+    Library.object = {
+        move_to(element, position) {
+            return moveContent(this, element, position);
+        },
+
+        trigger(eventName, bubbles = true, detail = {}) {
+            if (typeof this?.dispatchEvent !== 'function') {
+                throw new ActError(`Cannot trigger '${eventName}' on a value of type '${this?.constructor?.name ?? typeof this}': not an event target.`);
+            }
+
+            this.dispatchEvent(new CustomEvent(Binder.eventName(eventName), { bubbles, detail: unwrap(detail) }));
+            return this;
+        },
+    };
+
+    Library.string = {
+        after(text) {
+            const [self, search] = [this.toString(), text.toString()];
+            const index = self.indexOf(search);
+            return index === -1 ? self : self.substring(index + search.length);
+        },
+
+        before(text) {
+            const [self, search] = [this.toString(), text.toString()];
+            const index = self.indexOf(search);
+            return index === -1 ? self : self.substring(0, index);
+        },
+
+        between(start, end) {
+            const [self, startText, endText] = [this.toString(), start.toString(), end.toString()];
+            const index = self.indexOf(startText);
+            return index === -1 ? self : self.substring(index + startText.length, self.indexOf(endText));
+        },
+
+        capitalize() {
+            return this.toString().charAt(0).toUpperCase() + this.toString().slice(1);
+        },
+    };
+
+    for (const type of ['function', 'boolean', 'number', 'bigint', 'symbol', 'undefined']) Library[type] = {};
 
     const Act = global.Act = {
         get version() { return '0.2.0'; },
@@ -2935,37 +3195,42 @@
         },
 
         extensions: [],
-        _started: false,
+        hasStarted: false,
+        isStartingUp: false,
 
         extend(plugin) {
             if (typeof plugin === 'function') plugin = { install: plugin };
             this.extensions.push(plugin);
-            if (this._started) {
+
+            if (this.hasStarted) {
                 plugin.install?.(this);
                 plugin.ready?.(this);
             }
+
             return this;
         },
 
         configure() {
-            const conf = {};
-            for (const m of document.querySelectorAll('meta[name^="act-"]')) {
-                const key = m.name.slice(4).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-                try { conf[key] = JSON.parse(m.content); }
-                catch { conf[key] = m.content; }
+            for (const meta of document.querySelectorAll('meta[name^="act-"]')) {
+                const key = meta.name.slice(4).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+                try { this.config[key] = JSON.parse(meta.content); }
+                catch { this.config[key] = meta.content; }
             }
-            Object.assign(this.config, conf);
-            for (const ext of this.extensions) ext.install?.(this);
+
+            for (const extension of this.extensions) extension.install?.(this);
         },
 
         start() {
+            this.isStartingUp = true;
             if (this.config.startTime) console.time('act start');
+
             new Binding(window);
-            const bindedNodes = this.init(document.body, true);
+            const boundNodes = this.init(document.body, true, true);
+
             if (this.config.startTime) console.timeEnd('act start');
-            document.body.dispatchEvent(new CustomEvent('actready', { bubbles: true, detail: { bindedNodes } }));
-            for (const ext of this.extensions) ext.ready?.(this);
-            this._started = true;
+            document.body.dispatchEvent(new CustomEvent('actready', { bubbles: true, detail: { bindedNodes: boundNodes } }));
+            for (const extension of this.extensions) extension.ready?.(this);
+            this.hasStarted = true;
         },
 
         init(root, bindRoot, force) {
@@ -2973,14 +3238,15 @@
         },
 
         run(target, code) {
-            const binding = Binder.from(target, true), source = new Source(null, 'actrun', code);
-            return new EventManager(binding, 'actrun', {}, source, source.scope).run(target);
+            const binding = Binder.ensure(target);
+            const source = new Source(null, Source.TYPE.ACT_RUN, code);
+            return new EventManager(binding, Source.TYPE.ACT_RUN, {}, source, source.scope).run(target);
         },
 
         get globals() {
             return Binder.from(document.body).data;
         },
 
-        is, unwrap, unwrapAll, from, through, Library,
+        is, unwrap, unwrapAll, from, through, Library, abortable,
     };
 })(this);
