@@ -1,10 +1,10 @@
 # act
 
-> ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
+> [![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
 > [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > [!CAUTION]
-> **This version is in active development.** Breaking changes may occur without notice.
+> **This is not even a beta. Breaking changes may occur without notice.**
 
 
 ```html
@@ -93,7 +93,7 @@
 
 - 🫡 Inspired by great libraries like [**_hyperscript**](https://hyperscript.org/), [**surreal**](https://github.com/gnat/surreal) and [**intercooler.js** `ic-action`](https://intercoolerjs.org/attributes/ic-action).
 
-- 🐴 Simple integration with [**htmx**](https://htmx.org/) v2 and [v4](https://four.htmx.org/), using the one-line `act-htmx.js` script
+- 🐴 Simple integration with [**htmx**](https://htmx.org/) v2 and [v4](https://four.htmx.org/), using the `act-htmx.js` script
 
 - 🫨 It's unstable and highly experimental
 
@@ -145,19 +145,19 @@ It's like JavaScript is begging to be abstracted away.
 </script>
 ```
 
-Well... yeah... We've been there before. A little bit of this is fine I guess, but as the code grows (and it doesn't need to grow that much) it gets hard to manage and maintain.
+Well... yeah... We've been there before. A little bit of this is fine I guess, but as the code grows (and it doesn't need to grow that much) it gets hard to locate, manage and maintain.
 
 ```bash
 npx create-react-app my-app
 ```
 
-Wait, wait... Maybe that's too much.
+Wait, wait... You really wanna go there?
 
 Could there be another way?
 
 > grug much prefer put code on the thing that do the thing. now when grug look at the thing grug know the thing what the thing do, alwasy good relief!
 >
-> -[_The Grug Brained Developer_](https://grugbrain.dev/#grug-on-soc)
+> -[_The Grug Brained Developer_](https://grugbrain.dev/#grug-on-soc) on Separation of Concerns
 
 With act the behavior is expressed in this compact way within the button itself:
 
@@ -174,9 +174,6 @@ Simply include the `act.js` file in your HTML. No build steps required. You can 
 ```html
 <script src="act.js"></script>
 ```
-
-> [!TIP]
-> `act.js` is shipped as readable, commented source on purpose — the web deserves the *view source* affordance: want to know how something is made? Just view source. If you need the extra KBs, use the minified build in [`dist/act.min.js`](dist/act.min.js).
 
 ### In a nutshell
 
@@ -616,7 +613,7 @@ Blocks can be defined in two ways:
 
 When the `run` keyword is used, the block will be executed in the current sentence target, which is the target specified or inherited in the `run` sentence and not the element where the block is defined. This way the block can be easily reused with different targets.
 
-By default, `run` looks for the block by walking up the ancestor chain of the source element, then the sentence target. To reach a block that lives in a different part of the DOM — a sibling subtree, a shared component, etc. — use `from` followed by a selector pointing to the element where the block is defined (or any of its ancestors):
+By default, `run` looks for the block by walking up the ancestor chain of the source element, then the sentence target. To reach a block that lives in a different part of the DOM (a sibling subtree, a shared component, and so on), use `from` followed by a selector pointing to the element where the block is defined (or any of its ancestors):
 
 ```html
 run my_block from #component arg1 arg2;
@@ -923,16 +920,16 @@ log: $fruits[4].to_upper_case!;
 
 `left?.right`
 
-Like the `at` operation, but returns `undefined` instead of throwing if the left operand is `null` or `undefined`. The safe flag propagates through the rest of the chain — so `a?.b.c` returns `undefined` if `a` is `null` rather than throwing on `.c`.
+Like the `at` operation, but returns `undefined` instead of throwing if the left operand is `null` or `undefined`. The safe flag propagates through the rest of the chain, so `a?.b.c` returns `undefined` if `a` is `null` rather than throwing on `.c`.
 
-Mixed chains work naturally: `a.b?.c.d` creates two separate access expressions — `.b` is unsafe (throws if `a` is `null`) and `?.c.d` is safe (returns `undefined` if `a.b` is `null`).
+Mixed chains work naturally: `a.b?.c.d` creates two separate access expressions: `.b` is unsafe (throws if `a` is `null`) and `?.c.d` is safe (returns `undefined` if `a.b` is `null`).
 
 ```act
 $user: null;
-$user?.name;        // undefined — no throw
+$user?.name;        // undefined, no throw
 
 $data: [meta: null];
-$data.meta?.title;  // undefined — .meta is safe, .title propagates
+$data.meta?.title;  // undefined: .meta is safe, .title propagates
 ```
 
 #### Subscript
@@ -944,7 +941,7 @@ The index can be a value or an expression.
 Unlike the `at` operation, the subscript operation only accesses the strict result of the right operand without performing any lookup or case conversion.
 
 > [!NOTE]
-> One more expression — **insert** (`<<`) — appends content into a single element or pushes into an array. Because it reads like an operator, it's documented in [Operators](#operators) (`#div << 'Content'`).
+> One more expression, **insert** (`<<`), appends content into a single element or pushes into an array. Because it reads like an operator, it's documented in [Operators](#operators) (`#div << 'Content'`).
 
 ### Operators 
 
@@ -985,7 +982,7 @@ Unlike the `at` operation, the subscript operation only accesses the strict resu
 | `and` | And | `$foo and $bar` |
 | `or` | Or | `$isLoggedIn or #username-field.has_attribute: disabled` |
 | `??` | Nullish coalescing. Returns the left operand if it is not `null` or `undefined`, otherwise the right. Unlike `or`, falsy values like `0` or `''` pass through. | `$user?.name ?? 'Anonymous'` |
-| `not` | Logical negation. This is a **[prefix](#not)**, not a binary operator — it takes only a right operand. | `not $isLoggedIn` |
+| `not` | Logical negation. This is a **[prefix](#not)**, not a binary operator, so it takes only a right operand. | `not $isLoggedIn` |
 || **COMPARISON** ||
 | `is` | Equal (JavaScript `===`) | `1 is 2` |
 | `is_not` | Not equal (JavaScript `!==`) | `1 is_not 2` |
@@ -1006,7 +1003,7 @@ Unlike the `at` operation, the subscript operation only accesses the strict resu
 | `then` or `\|` | Uses the result of the left expression as the target for the right expression. | `'foo' as id then :value`, `'foo' as id \| :value` |
 | `is_in` | Checks if the left operand is in the right operand (collection or string). | `'a' is_in 'abc'`, `1 is_in [1 2 3]` |
 | `is_not_in` | Checks if the left operand is not in the right operand. | `'d' is_not_in 'abc'` |
-| `<<` | Inserts the right operand into the left operand. If left is a **single element**, sets `innerHTML`. If the right operand is a `<template>` element, it inserts the template's `innerHTML`. If left is an array, pushes the value. Collections are not accepted — select one element with `!` or `first`. | `#div << 'Content'`, `#div << #my-template`, `.item! << 'Content'`, `$arr << 1` |
+| `<<` | Inserts the right operand into the left operand. If left is a **single element**, sets `innerHTML`. If the right operand is a `<template>` element, it inserts the template's `innerHTML`. If left is an array, pushes the value. Collections are not accepted, so select one element with `!` or `first`. | `#div << 'Content'`, `#div << #my-template`, `.item! << 'Content'`, `$arr << 1` |
 
 > [!NOTE]
 > All **arithmetic and comparison** operators can be used with **dimensions** if both operands are dimensions with the **same dimension unit**.
@@ -1078,7 +1075,7 @@ $data: (fetch: '/api/data' then json!) rescue ['name': 'Default'];
 // The $exception variable contains the caught exception
 #risky-operation do
     // Some operation that might fail
-    throw: 'Something went wrong!';
+    throw 'Something went wrong!';
 end rescue (
     error: 'Caught exception:' $exception;
     // $exception contains the error message or Error object
@@ -1108,9 +1105,6 @@ Prefixes are special words that modify the value or expression that follows them
 #### `not`
 
 Negate the value that follows.
-
-> [!NOTE]
-> Wait, wasn't `not` an operator? `not true`, I lied: It's a prefix.
 
 #### `local`
 
@@ -1142,9 +1136,6 @@ end;
 log: $a;
 // Logs 10.
 ```
-
-> [!TIP]
-> **See also:** [`global`](#global), [`scoped`](#scoped), [Data Scopes](#data-scopes)
 
 #### `global`
 
@@ -1211,13 +1202,13 @@ Returns the type name of a value as a string.
 Examples:
 
 ```act
-type: 5;
+type 5;
 // Returns 'number'
 
-type: #some-div;
+type #some-div;
 // Returns 'element'
 
-type: [1, 2, 3];
+type [1, 2, 3];
 // Returns 'array'
 ```
 
@@ -1296,9 +1287,9 @@ if condition (
     // This Scope will be evaluated if all preceding conditions are false.
 );
 
-#some-element if inner_html.includes: 'foo', (
+#some-element if :inner_html.includes: 'foo', (
     alert: 'The element has the word "foo" in its innerHTML';
-) else if inner_html.includes: 'bar', (
+) else if :inner_html.includes: 'bar', (
     alert: 'The element has the word "bar" in its innerHTML';
 ) else (
     alert: 'The element does not have the word "foo" or "bar" in its innerHTML';
@@ -1308,7 +1299,8 @@ if condition (
 > [!NOTE]
 > **A note on act's simple but expressive syntax.**
 >
-> `if` is just one big expression with multiple Words and Scopes as lazy evaluated arguments.\
+> `if`, like the other keywords, is just one big expression with multiple Words and Scopes 
+> as lazy evaluated arguments.\
 > act syntax is very simple, but it also allows for some expressive code.\
 > With that said, let's get back to our scheduled programming...
 
@@ -1394,7 +1386,7 @@ while $i < 10 (
 );
 ```
 
-> If the condition is initially `false`, the body is never executed (same as JavaScript's `while`).
+> If the condition is initially `false`, the body is never executed.
 
 #### `loop`
 
@@ -1418,8 +1410,8 @@ loop (
 ```
 
 ```html
-<div act="loop (wait: 1s; log: 'Running...')">
-    <button act@click="kill act">Stop the loop</button>
+<div id="looper" act="loop (wait: 1s; log: 'Running...')">
+    <button act@click="#looper kill act">Stop the loop</button>
 </div>
 ```
 
@@ -1431,6 +1423,10 @@ Arguments:
 `(name: Word) [arguments...] (body: Scope)`
 
 ```act
+def hello do
+    log: 'Hello, world!';
+end;
+
 def greet $name (
     log: `Hello, {$name}!`;
 );
@@ -1472,7 +1468,7 @@ Blocks can accept named arguments:
 By default, the block is looked up by walking up the ancestor chain of the source element and then the sentence target. Use `from` to reach a block defined elsewhere in the DOM:
 
 ```html
-<!-- Block defined in a sidebar component, unrelated to the button -->
+<!-- Block defined in a sidebar, unrelated to the button -->
 <aside id="shared-blocks">
     <script type="text/act" act-block="validate $value">
         log: `Validating: {$value}`;
@@ -1541,19 +1537,19 @@ Adds an event listener to the target element.
 
 Arguments:
 
-- `(event name: Word) (body: Scope)` — basic event binding
-- `(event name: Word) (options: Object) (body: Scope)` — with options object
-- `(event name: Word) [...options: Word] (body: Scope)` — with single-word options
-- `(event name: Word) [...options: Word] matching (selector) (body: Scope)` — event delegation
-- `([alias name: event name]: Object) [...options: Word] [matching (selector)] (body: Scope)` — aliased event
+- `(event name: Word) (body: Scope)`: basic event binding
+- `(event name: Word) (options: Object) (body: Scope)`: with an options object
+- `(event name: Word) [...options: Word] (body: Scope)`: with single-word options
+- `(event name: Word) [...options: Word] matching (selector) (body: Scope)`: event delegation
+- `([alias name: event name]: Object) [...options: Word] [matching (selector)] (body: Scope)`: aliased event
 
 **Single-word options:** Any word before the scope becomes `options[word] = true`. Common options:
-- `target` — handler receives `event.target` as `me` instead of the bound element
-- `once` — handler fires only once
-- `capture`, `passive` — passed through to `addEventListener`
-- `prevent` — calls `event.preventDefault()`
-- `stop` — calls `event.stopPropagation()`
-- `only` — calls `event.stopImmediatePropagation()`
+- `target`: handler receives `event.target` as `me` instead of the bound element
+- `once`: handler fires only once
+- `capture`, `passive`: passed through to `addEventListener`
+- `prevent`: calls `event.preventDefault()`
+- `stop`: calls `event.stopPropagation()`
+- `only`: calls `event.stopImmediatePropagation()`
 
 Examples:
 
@@ -1614,7 +1610,7 @@ Arguments:
 
 #### `kill`
 
-Halts all currently running contexts of a specific event on the target element **immediately**. The running sentence is abandoned, and any in-flight [abortable](#actabortable) operation (like `transition` or `fade`) runs its abort handler, **reverting** the element to its pre-operation state. This is useful for stopping long-running or infinite loops triggered by events.
+Halts all currently running contexts of a specific event on the target element **immediately**. The running sentence is abandoned, and any in-flight [abortable](#actabortable) operation (like `transition` or `wait`) runs its abort handler, **reverting** the element to its pre-operation state. This is useful for stopping long-running or infinite loops triggered by events.
 
 For a graceful stop that lets the current sentence complete, use [`finish`](#finish).
 
@@ -1624,8 +1620,8 @@ Arguments:
 Examples:
 
 ```html
-<div act="loop (wait: 1s; log: 'Running...')">
-    <button act@click="kill act">Stop the loop</button>
+<div id="looper" act="loop (wait: 1s; log: 'Running...')">
+    <button act@click="#looper kill act">Stop the loop</button>
 </div>
 ```
 
@@ -1633,7 +1629,7 @@ Returns `true` if contexts were running and halted, `false` otherwise.
 
 #### `finish`
 
-The graceful counterpart to [`kill`](#kill): the sentence that is currently executing completes normally — a running 3-second `transition` plays out its 3 seconds — and then execution stops at the next sentence boundary, so no further sentences run. In-flight [abortable](#actabortable) operations are **not** aborted.
+The graceful counterpart to [`kill`](#kill): the sentence that is currently executing completes normally (a running 3-second `transition` plays out its 3 seconds), and then execution stops at the next sentence boundary, so no further sentences run. In-flight [abortable](#actabortable) operations are **not** aborted.
 
 Arguments:
 `(event name: Word)`
@@ -1641,9 +1637,9 @@ Arguments:
 Examples:
 
 ```html
-<div act="loop (transition: opacity to 0.2 in 1s; transition: opacity to 1 in 1s)">
-    <button act@click="kill act">Stop now (reverts the running transition)</button>
-    <button act@click="finish act">Stop after the current transition</button>
+<div id="looper" act="loop (transition: opacity to 0.2 in 1s; transition: opacity to 1 in 1s)">
+    <button act@click="#looper kill act">Stop now (reverts the running transition)</button>
+    <button act@click="#looper finish act">Stop after the current transition</button>
 </div>
 ```
 
@@ -1725,7 +1721,7 @@ else 'Unknown status';
 log: $message;
 ```
 
-> Unlike JavaScript's `switch`, `case` has **no fall-through behavior** — only the first matching branch executes, and execution continues after the `case` statement.
+> Unlike JavaScript's `switch`, `case` has **no fall-through behavior**: only the first matching branch executes, and execution continues after the `case` statement.
 
 #### `debounce`
 
@@ -1790,7 +1786,7 @@ is_locked? log: 'Locked';
 
 ### Signals
 
-Act has a few statements called signals that can be used to control the execution flow of a scope. They are [keywords](#keywords) that work by throwing a control-flow signal which the enclosing loop, scope, or function catches — grouped separately here because they steer execution rather than compute a value.
+Act has a few statements called signals that can be used to control the execution flow of a scope. They are [keywords](#keywords) that work by throwing a control-flow signal which the enclosing loop, scope, or function catches. They are grouped separately here because they steer execution rather than compute a value.
 
 #### `break`
 
@@ -1965,7 +1961,7 @@ Examples:
 ```act
 #some-element move_to: #new-parent;
 #some-element move_to: #new-parent afterbegin;
-{< p} move_to: first <article> beforeend;
+{< p} move_to: first <article> append;
 ```
 
 #### `empty`
@@ -2146,7 +2142,7 @@ Returns:
 Examples:
 
 ```act
-#some-element is_in_view! ? log!: 'Visible';
+#some-element is_in_view! ? log: 'Visible';
 #some-element is_in_view: true;
 // Returns 'partially' if any part is visible
 ```
@@ -2176,7 +2172,7 @@ Examples:
 
 ```act
 #some-element previous! *color: blue;
-#some-element previous!: .item;
+#some-element previous: .item;
 ```
 
 #### `parent`
@@ -2270,7 +2266,7 @@ last .moved-item move_to: #container prepend;
 
 Dispatches an event on the target.
 
-The target must be an **event target** — an element, but also `window` or `document`. Triggering on a value that cannot dispatch (a plain object, an array) throws.
+The target must be an **event target**: an element, but also `window` or `document`. Triggering on a value that cannot dispatch (a plain object, an array) throws.
 
 Arguments:
 `(eventName: string) [bubbles: boolean] [detail: object]`
@@ -2435,6 +2431,8 @@ Examples:
 
 ```act
 wait: 1s;
+wait: 150ms;
+wait: 500; // integers are treated as miliseconds
 ```
 
 #### `log`
@@ -2473,7 +2471,7 @@ Arguments:
 Examples:
 
 ```act
-error: 'Fatal error';
+error: ':(';
 ```
 
 #### `time_to_ms`
@@ -2569,11 +2567,6 @@ confirm: 'Are you sure?' ? log: 'User confirmed';
 // Prompt
 $name: prompt: 'What is your name?';
 
-// Fetch (using async mode &)
-fetch: '/api/data' &
-    then: ->( json! ) &
-    then: ->( log: :value );
-
 // LocalStorage
 local_storage.set_item: 'theme' 'dark';
 $theme: local_storage.get_item: 'theme';
@@ -2624,7 +2617,7 @@ log: source_element;
 
 #### `original_target`
 
-The initial execution target of the current context — the element the act code was dispatched on at the start of execution, before any target changes (e.g. via `with`).
+The initial execution target of the current context: the element the act code was dispatched on at the start of execution, before any target changes (e.g. via `with`).
 
 ```act
 log: original_target;
@@ -2682,7 +2675,7 @@ $invalid: NaN;
 
 ## Events Reference
 
-This section provides detailed documentation on how events work in Act.
+This section provides detailed documentation on how events work in act.
 
 ### Event Binding
 
@@ -2784,7 +2777,7 @@ The special `act` event is triggered when Act initializes (on `DOMContentLoaded`
 </main>
 ```
 
-The `act` event also fires when new elements are initialized via `Act.init(root)`. This is useful for frameworks like htmx that dynamically load HTML content — newly inserted elements with `act` attributes will have their `act` event triggered upon initialization.
+The `act` event also fires when new elements are initialized via `Act.init(root)`. This is useful for frameworks like htmx that dynamically load HTML content, since newly inserted elements with `act` attributes will have their `act` event triggered upon initialization.
 
 ### Event Modifiers
 
@@ -2853,9 +2846,9 @@ This is particularly useful with the `act` event when you want to stop specific 
 > [!NOTE]
 > HTML lowercases attribute names, so aliases are effectively case-insensitive: `act@click#saveForm` registers `saveform`, and `kill saveForm` will **not** find it. Stick to lowercase or snake_case alias names.
 
-### Event Names with `:` or `.` — Bracketed Names
+### Bracketed Event Names (for names containing `:` or `.`)
 
-The parts of an event attribute are separated by sigils — `:option`, `.key`, `#alias` — so a bare event name ends at the first `:` or `.`. To use those characters **inside** a name, wrap it in brackets, which take it verbatim:
+The parts of an event attribute are separated by sigils (`:option`, `.key`, `#alias`), so a bare event name ends at the first `:` or `.`. To use those characters **inside** a name, wrap it in brackets, which take it verbatim:
 
 ```html
 <!-- every htmx event needs brackets -->
@@ -2882,7 +2875,7 @@ Act is strict about this: a name that is not bracketed and contains an unknown `
 ```
 
 > [!WARNING]
-> Attribute names are lowercased by HTML, so an event whose name contains capitals — such as htmx's `htmx:before:viewTransition` — **cannot** be bound from an attribute at all. Use the [`on`](#on) keyword with a quoted string, which preserves case:
+> Attribute names are lowercased by HTML, so an event whose name contains capitals, such as htmx's `htmx:before:viewTransition`, **cannot** be bound from an attribute at all. Use the [`on`](#on) keyword with a quoted string, which preserves case:
 > ```html
 > <script type="text/act">
 >     on 'htmx:before:viewTransition' ( log: 'transitioning' );
@@ -2915,7 +2908,7 @@ Or from Act code using the `trigger` method:
 </button>
 ```
 
-The event data is available through the [`$event` variable](#the-event-variable) — `$event.detail` carries custom data passed to the `CustomEvent`.
+The event data is available through the [`$event` variable](#the-event-variable): `$event.detail` carries custom data passed to the `CustomEvent`.
 
 ### Lifecycle Events
 
@@ -2968,7 +2961,7 @@ document.addEventListener('actstart', (e) => {
 
 #### `actend`
 
-Dispatched on the **target element** whenever an act event handler finishes executing — whether it completed successfully, was halted, or threw an error. Always fires.
+Dispatched on the **target element** whenever an act event handler finishes executing, whether it completed successfully, was halted, or threw an error. Always fires.
 
 ```js
 document.addEventListener('actend', (e) => {
@@ -3053,7 +3046,7 @@ You can configure Act in two ways:
 
 ### Extensions
 
-Act's extension system is built around `Act.extend()` — a single entry point for registering plugins before (or after) initialization.
+Act's extension system is built around `Act.extend()`, a single entry point for registering plugins before (or after) initialization.
 
 #### `Act.extend(plugin)`
 
@@ -3067,7 +3060,7 @@ Act.extend(a).extend(b);    // chained
 `plugin` can be:
 
 - **A plain object** with optional lifecycle hooks and a `name`
-- **A function** — treated as the `install` hook
+- **A function**, treated as the `install` hook
 
 ```js
 // Object form
@@ -3108,7 +3101,7 @@ Act.extend({
         // configure
         // Enable sanitization
         Act.config.sanitize = true;
-        // sanitizer receives (element, html) — return the clean string, or null to skip insertion
+        // sanitizer receives (element, html); return the clean string, or null to skip insertion
         Act.config.sanitizer = (element, html) => DOMPurify.sanitize(html);
 
         // add a library method
@@ -3134,7 +3127,7 @@ Act.extend({
 
 ##### `ready(Act)`
 
-The `ready` hook fires after the initial page scan — equivalent to listening to the `actready` DOM event, but scoped to your plugin.
+The `ready` hook fires after the initial page scan, equivalent to listening to the `actready` DOM event, but scoped to your plugin.
 
 ```js
 Act.extend({
@@ -3192,31 +3185,31 @@ specialise a method for a narrower target type.
 > bucket by `typeof target`, and `typeof` reports `'object'` for Elements,
 > Arrays, `NodeList`s, `window` and `document` too. So a method registered there
 > is reachable from *every* object target that steps 1 and 2 did not already
-> resolve — put a method there only if it makes sense for all of them, or guard
+> resolve. Put a method there only if it makes sense for all of them, or guard
 > it and throw. [`trigger`](#trigger) is the built-in example: it lives in
 > `object` so it can reach `window` and `document`, and throws when the target
 > cannot dispatch events.
 >
-> Buckets also exist for the remaining `typeof` results — `boolean`, `function`,
-> `bigint`, `symbol` and `undefined` — and are empty by default.
+> Buckets also exist for the remaining `typeof` results (`boolean`, `function`,
+> `bigint`, `symbol` and `undefined`) and are empty by default.
 
 ```js
 Act.extend({
     install(Act) {
-        // Global method — available on any target
+        // Global method, available on any target
         Act.Library.globals.double_log = function (...args) {
             const values = Act.unwrapAll(args);
             console.log(...values);
             console.log(...values);
         };
 
-        // Element method — available when target is an Element
+        // Element method, available when target is an Element
         Act.Library.Element.pinkify = function () {
             this.style.backgroundColor = 'pink';
             this.style.color = 'black';
         };
 
-        // String method — available when target is a string
+        // String method, available when target is a string
         Act.Library.string.shout = function () {
             return this.toUpperCase() + '!!!';
         };
@@ -3229,7 +3222,7 @@ Act.extend({
 <p act@click="log: 'hello'.shout!;">Hover me!</p>
 ```
 
-Library methods that need to respond to `kill` can use `Act.abortable` — see [Act.abortable](#actabortable).
+Library methods that need to respond to `kill` can use `Act.abortable`. See [Act.abortable](#actabortable).
 
 ##### Keyword operations (`Act.Library.keywords`)
 
@@ -3248,14 +3241,14 @@ All keyword methods are **async** and receive:
 ```js
 Act.extend({
     install(Act) {
-        // `unless condition body`  — inverse of `if`
+        // `unless condition body`: inverse of `if`
         Act.Library.keywords.unless = async function (ctx, target, opts, args) {
             const [condition, body] = args;
             if (!(await ctx.asValueOf(condition, target)))
                 return await ctx.solve(body, target, opts);
         };
 
-        // `wait_more duration`  — waits 10× longer than `wait`
+        // `wait_more duration`: waits 10x longer than `wait`
         Act.Library.keywords.wait_more = async function (ctx, target, opts, args) {
             const { wait, time_to_ms } = Act.Library.globals;
             if (!args[0]) return await wait.call(target, '60s');
@@ -3272,7 +3265,7 @@ Act.extend({
 
 ##### Prefix operations (`Act.Library.prefixes`)
 
-Prefixes are single-word modifiers that wrap the value immediately following them — e.g. `not`, `global`, `first`. They receive the **pre-evaluated** value and return a transformed result.
+Prefixes are single-word modifiers that wrap the value immediately following them, for example `not`, `global`, `first`. They receive the **pre-evaluated** value and return a transformed result.
 
 All prefix methods receive:
 
@@ -3286,13 +3279,13 @@ All prefix methods receive:
 ```js
 Act.extend({
     install(Act) {
-        // `maybe value`  — returns undefined instead of throwing
+        // `maybe value`: returns undefined instead of throwing
         Act.Library.prefixes.maybe = async function (ctx, target, opts, value) {
             try { return await ctx.asValueOf(value, target); }
             catch { return undefined; }
         };
 
-        // `double value`  — multiplies a number by 2
+        // `double value`: multiplies a number by 2
         Act.Library.prefixes.double = async function (ctx, target, opts, value) {
             return Act.unwrap(await ctx.asValueOf(value, target)) * 2;
         };
@@ -3306,17 +3299,17 @@ Act.extend({
 
 ##### Reserved words (`Act.Library.words`)
 
-Words are identifier-like values with no arguments — they evaluate to a fixed value when encountered in expressions. Built-in examples: `me`, `true`, `false`, `null`, `document`, `window`.
+Words are identifier-like values with no arguments; they evaluate to a fixed value when encountered in expressions. Built-in examples: `me`, `true`, `false`, `null`, `document`, `window`.
 
 Word functions receive `(ctx, target)` and return the value.
 
 ```js
 Act.extend({
     install(Act) {
-        // `viewport_width`  — returns window.innerWidth
+        // `viewport_width`: returns window.innerWidth
         Act.Library.words.viewport_width = () => window.innerWidth;
 
-        // `is_mobile`  — returns a boolean
+        // `is_mobile`: returns a boolean
         Act.Library.words.is_mobile = () => window.innerWidth < 768;
     },
 });
@@ -3329,7 +3322,7 @@ Act.extend({
 
 ### Public API
 
-The global `Act` object is the JavaScript entry point. Most pages never touch it — it exists for configuration, extensions, programmatic control, and writing library methods.
+The global `Act` object is the JavaScript entry point. It exists for configuration, extensions, programmatic control, and writing library methods.
 
 #### The `Act` object
 
@@ -3338,12 +3331,12 @@ The global `Act` object is the JavaScript entry point. Most pages never touch it
 | `Act.version` | The current version string (e.g. `'0.2.0'`). |
 | `Act.config` | The live [configuration](#configuration) object. Mutate it from inside an [`install`](#hooks) hook. |
 | `Act.extensions` | The array of registered [extensions](#actextensions). |
-| `Act.Library` | The [Library](#act-library) registry — add methods, keywords, and prefixes here to extend the language. |
+| `Act.Library` | The [Library](#act-library) registry. Add methods, keywords, and prefixes here to extend the language. |
 | `Act.globals` | The [global data scope](#global-scope) (the data bag on `<body>`). Read or write global variables from JavaScript. |
 | `Act.extend(plugin)` | Register an [extension](#actextendplugin). Returns `Act` for chaining. |
 | `Act.start()` | Manually start Act: scan `document.body`, bind events, and dispatch [`actready`](#actready). Runs automatically on `DOMContentLoaded` unless [`start`](#options) is `false`. |
 | `Act.configure()` | Read `<meta name="act-*">` tags into `Act.config` and run `install` hooks. Runs automatically before `start()`. |
-| `Act.init(root, bindRoot = true, force = false)` | Scan and bind a DOM subtree. Use it to activate act code in **dynamically-inserted** HTML — the [htmx integration](#-htmx-integration-act-htmxjs) relies on it. `bindRoot` also binds `root` itself; `force` re-binds even if `root` was already bound. |
+| `Act.init(root, bindRoot = true, force = false)` | Scan and bind a DOM subtree. Use it to activate act code in **dynamically-inserted** HTML; the [htmx integration](#-htmx-integration-act-htmxjs) relies on it. `bindRoot` also binds `root` itself; `force` re-binds even if `root` was already bound. |
 | `Act.run(target, code)` | Parse and execute a string of act `code` against `target`, returning the run's promise. For programmatic, one-off execution. |
 
 #### Helper functions
@@ -3395,7 +3388,7 @@ const value = Act.unwrap(await ctx.solve(solvable, target, opts));
 
 ### `Act.abortable`
 
-Some operations take time — a timeout, an animation, a fetch. While that operation is running, the user might [`kill`](#kill) it. By default, act stops waiting but has no way to clean up after itself.
+Some operations take time: a timeout, an animation, a fetch. While that operation is running, the user might [`kill`](#kill) it. By default, act stops waiting but has no way to clean up after itself.
 
 `Act.abortable` solves that. You give it two functions: `perform` to do the work, and `abort` to undo it if killed.
 
@@ -3406,14 +3399,14 @@ Act.abortable({
 })
 ```
 
-`perform` receives a `done` callback — call it when the operation completes. If `perform` is an `async` function, act detects the returned Promise and resolves automatically, so `done` isn't needed in that case.
+`perform` receives a `done` callback; call it when the operation completes. If `perform` is an `async` function, act detects the returned Promise and resolves automatically, so `done` isn't needed in that case.
 
 > [!NOTE]
 > `abort` only runs on [`kill`](#kill). A graceful [`finish`](#finish) lets the operation complete normally and never triggers it.
 
 #### Examples
 
-**Highlight** — turns an element yellow for a few seconds, and restores it immediately if killed:
+**Highlight**: turns an element yellow for a few seconds, and restores it immediately if killed:
 
 ```js
 Act.extend({
@@ -3444,11 +3437,11 @@ Act.extend({
 <button act@click="#msg kill click">Cancel highlight</button>
 ```
 
-Without `Abortable`, clicking **Cancel** would abandon the timeout silently — the element would stay yellow until the timer fires. With `abortable`, the cleanup runs immediately on kill and the original color is restored right away.
+Without `Abortable`, clicking **Cancel** would abandon the timeout silently, and the element would stay yellow until the timer fires. With `abortable`, the cleanup runs immediately on kill and the original color is restored right away.
 
 ---
 
-**Typewriter** — types text into an element one character at a time. This example shows that cleanup doesn't have to *undo* the operation — it can also *complete* it instantly:
+**Typewriter**: types text into an element one character at a time. This example shows that cleanup doesn't have to *undo* the operation; it can also *complete* it instantly:
 
 ```js
 Act.extend({
@@ -3481,7 +3474,6 @@ Act.extend({
 Clicking **Skip** stops the timer and writes the full text at once, rather than leaving the element in an incomplete state. The cleanup decides what "stopping early" means for this operation.
 
 
-
 ### 🐴 htmx Integration (act-htmx.js)
 
 **act-htmx.js** is a tiny glue script that ensures Act bindings work seamlessly with htmx's content swapping. It works with both **htmx 2** and **htmx 4**.
@@ -3496,7 +3488,7 @@ act-htmx automatically initializes Act bindings on every element htmx processes.
 
 #### Installation
 
-**Include both libraries and then the script — that's the whole setup:**
+**Include both libraries and then the script. That's the whole setup:**
 
 ```html
 <script src="act.js"></script>
@@ -3535,16 +3527,6 @@ When the button is clicked, htmx loads content from `/new-content`. If that cont
     <p act@mouseover="*color: red">Hover me!</p>
 </div>
 ```
-
-#### How It Works
-
-The whole thing is one line — it registers a callback with [`htmx.onLoad`](https://htmx.org/api/#onLoad), which htmx invokes with every element it processes, and hands that element to [`Act.init()`](#the-act-object):
-
-```js
-htmx.onLoad(elt => Act.init(elt));
-```
-
-`htmx.onLoad` is deliberately the only htmx API used, because it is the one that behaves identically across htmx majors. htmx 4 removed `htmx.defineExtension`, the `onEvent` hook, the `hx-ext` attribute and the `htmx:load` event, and its `onLoad` wraps `htmx:after:process` instead of `htmx:load` — none of which is visible from here.
 
 #### Notes
 
@@ -3587,9 +3569,9 @@ Syntax highlighting and language support is available for:
 | **VSCode** (and derivatives) | ✅ | ✅ |
 | **Neovim** (via tree-sitter) | ✅ | ✅ |
 | **Zed** | ✅ | ✅ |
-| **TextMate** | ✅ | — |
-| **Visual Studio** | ✅ | — |
-| **WebStorm / IntelliJ** | ✅ | — |
+| **TextMate** | ✅ | No |
+| **Visual Studio** | ✅ | No |
+| **WebStorm / IntelliJ** | ✅ | No |
 
 Editor support lives in its own repository: [**oriolmrt/act-editors**](https://github.com/oriolmrt/act-editors), which has detailed installation instructions for each editor.
 
@@ -3599,7 +3581,7 @@ Editor support lives in its own repository: [**oriolmrt/act-editors**](https://g
 
 As with any scripting language, you should treat `act` code with the same security considerations as you would raw JavaScript or `innerHTML`. Ensure that you only execute trusted code and avoid injecting unsanitized user input directly into `act` attributes or scripts.
 
-#### HTML Sanitization
+### HTML Sanitization
 
 When `sanitize: true`, the `append`, `prepend`, `set_html`, and `set_outer_html` methods pass HTML strings through the sanitizer. All other HTML assignment paths (`inner_html:`, `<<`) are treated as direct, intentional assignments and bypass sanitization. To enable sanitization, set `sanitize: true` and provide a `sanitizer` function via an extension:
 
@@ -3614,8 +3596,8 @@ Act.extend({
 ```
 
 The `sanitizer` function receives two arguments:
-- **`element`** — the target DOM element receiving the HTML (useful for context-aware sanitizers)
-- **`html`** — the raw HTML string about to be inserted
+- **`element`**: the target DOM element receiving the HTML (useful for context-aware sanitizers)
+- **`html`**: the raw HTML string about to be inserted
 
 Return a sanitized string to replace the original, or `null` to suppress the insertion entirely. If `sanitize` is `true` but no `sanitizer` is provided, act throws a configuration error.
 
