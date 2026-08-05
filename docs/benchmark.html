@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Act Benchmark</title>
+    <script src="../act.js"></script>
+    <script>
+        // Silence the console.time('act start') the library emits on load.
+        if (window.Act) Act.config.startTime = false;
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 24px 32px;
+            line-height: 1.5;
+        }
+
+        h1 {
+            font-size: 1.6rem;
+            margin-bottom: 4px;
+            color: #fff;
+        }
+
+        h1 span {
+            color: #888;
+            font-weight: 400;
+            font-size: 0.9rem;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+
+        .mode-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+        }
+
+        .mode-tab {
+            padding: 8px 18px;
+            background: #222;
+            border: 1px solid #333;
+            border-bottom: none;
+            border-radius: 6px 6px 0 0;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+
+        .mode-tab.active {
+            background: #2d3a4a;
+            color: #fff;
+            border-color: #3a5a7a;
+        }
+
+        .controls {
+            display: flex;
+            gap: 16px;
+            align-items: end;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            padding: 16px;
+            background: #222;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-group label {
+            font-size: 0.75rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-group select,
+        .control-group input {
+            padding: 6px 10px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+            font-family: inherit;
+        }
+
+        .control-group select {
+            min-width: 180px;
+        }
+
+        .control-group input[type="number"] {
+            width: 100px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+            align-items: end;
+        }
+
+        button {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: filter 0.15s;
+        }
+
+        button:hover {
+            filter: brightness(1.15);
+        }
+
+        button:active {
+            filter: brightness(0.9);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            filter: none;
+        }
+
+        .btn-run {
+            background: #3a7bd5;
+            color: #fff;
+        }
+
+        .btn-clear {
+            background: #444;
+            color: #ccc;
+        }
+
+        .results {
+            margin-bottom: 24px;
+        }
+
+        .results h2 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .results-table th {
+            text-align: left;
+            padding: 8px 12px;
+            background: #252525;
+            border-bottom: 2px solid #444;
+            color: #999;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .results-table td {
+            padding: 6px 12px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .results-table tr:hover td {
+            background: #252525;
+        }
+
+        .results-table .num {
+            text-align: right;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            font-size: 0.8rem;
+        }
+
+        .results-table .best {
+            color: #7ac77a;
+        }
+
+        .results-table code {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.72rem;
+            color: #9ab;
+        }
+
+        .empty-state {
+            color: #555;
+            text-align: center;
+            padding: 32px;
+            font-style: italic;
+        }
+
+        .profile-desc {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 16px;
+            padding: 8px 12px;
+            background: #1e1e1e;
+            border-left: 3px solid #444;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .profile-desc strong {
+            color: #aaa;
+        }
+
+        .note {
+            font-size: 0.78rem;
+            color: #777;
+            margin-top: 20px;
+            padding: 14px 16px;
+            background: #1e1e1e;
+            border: 1px solid #2c2c2c;
+            border-radius: 6px;
+            line-height: 1.6;
+        }
+
+        .note strong {
+            color: #aaa;
+        }
+
+        .note code {
+            font-family: 'SF Mono', Monaco, monospace;
+            color: #9ab;
+            font-size: 0.75rem;
+        }
+
+        #bench-container {
+            position: absolute;
+            width: 0;
+            height: 0;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .running-indicator {
+            display: inline-block;
+            margin-left: 8px;
+            color: #f0c040;
+            font-size: 0.8rem;
+            animation: pulse 0.8s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>⚡ Act Benchmark <span>v2.0</span></h1>
+    <p class="subtitle">Isolates parse/bind cost from steady-state interpreter throughput.</p>
+
+    <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="pipeline" onclick="setMode('pipeline')">Pipeline (parse + bind)</button>
+        <button class="mode-tab" data-mode="hot" onclick="setMode('hot')">Hot Eval (interpreter)</button>
+    </div>
+
+    <!-- PIPELINE CONTROLS -->
+    <div class="controls" id="controls-pipeline">
+        <div class="control-group">
+            <label>Elements</label>
+            <input type="number" id="p-count" value="1000" min="10" max="20000" step="100">
+        </div>
+        <div class="control-group">
+            <label>Profile</label>
+            <select id="p-profile">
+                <option value="dom">DOM Manipulation</option>
+                <option value="parse">Parse Only (event-bound)</option>
+                <option value="exec">Parse + Execute (init)</option>
+                <option value="events">Event Binding (multi-event)</option>
+                <option value="mixed" selected>Mixed (realistic)</option>
+                <option value="stress">Stress (loops + scopes)</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Repeats</label>
+            <input type="number" id="p-repeats" value="7" min="1" max="50" step="1">
+        </div>
+        <div class="control-group">
+            <label>Warmup</label>
+            <input type="number" id="p-warmup" value="2" min="0" max="20" step="1">
+        </div>
+        <div class="btn-group">
+            <button class="btn-run" id="btn-run" onclick="run()">▶ Run</button>
+            <button class="btn-clear" onclick="clearResults()">Clear</button>
+        </div>
+        <span id="running" class="running-indicator" style="display:none">Running…</span>
+    </div>
+
+    <!-- HOT-EVAL CONTROLS -->
+    <div class="controls" id="controls-hot" style="display:none">
+        <div class="control-group">
+            <label>Script</label>
+            <select id="h-script"></select>
+        </div>
+        <div class="control-group">
+            <label>Evals / sample</label>
+            <input type="number" id="h-inner" value="5000" min="100" max="200000" step="100">
+        </div>
+        <div class="control-group">
+            <label>Samples</label>
+            <input type="number" id="h-repeats" value="7" min="1" max="50" step="1">
+        </div>
+        <div class="control-group">
+            <label>Warmup samples</label>
+            <input type="number" id="h-warmup" value="2" min="0" max="20" step="1">
+        </div>
+        <div class="btn-group">
+            <button class="btn-run" id="btn-run-hot" onclick="run()">▶ Run</button>
+            <button class="btn-clear" onclick="clearResults()">Clear</button>
+        </div>
+        <span id="running-hot" class="running-indicator" style="display:none">Running…</span>
+    </div>
+
+    <div id="profile-desc" class="profile-desc"></div>
+
+    <div class="results">
+        <h2>Results</h2>
+        <table class="results-table">
+            <thead id="results-head"></thead>
+            <tbody id="results-body">
+                <tr><td class="empty-state">No results yet. Click Run to start.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="note" id="methodology"></div>
+
+    <div id="bench-container"></div>
+
+    <script>
+        // ─── Setup ──────────────────────────────────────────────────────────
+        Act.config.startTime = false;
+
+        const container = document.getElementById('bench-container');
+        const resultsHead = document.getElementById('results-head');
+        const resultsBody = document.getElementById('results-body');
+        const profileDesc = document.getElementById('profile-desc');
+
+        let mode = 'pipeline';
+        let isRunning = false;
+        let runCounter = 0;
+        let results = []; // rows for the active mode
+
+        // ─── Timing helpers ─────────────────────────────────────────────────
+        const yieldToLoop = () => new Promise(r => setTimeout(r, 0));
+
+        function stats(samples) {
+            const s = [...samples].sort((a, b) => a - b);
+            const n = s.length;
+            const mid = n >> 1;
+            const median = n % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+            const mean = s.reduce((a, b) => a + b, 0) / n;
+            return { min: s[0], median, mean, max: s[n - 1] };
+        }
+
+        // ─── Pipeline profiles (end-to-end parse + bind) ────────────────────
+        const PIPELINE = {
+            parse: {
+                name: 'Parse Only',
+                desc: 'Complex syntax parsed but <em>not executed</em> (event-bound) — isolates lexer + parser + binding.',
+                templates: [
+                    `act@click="$a: 1; $b: 2; $c: $a + $b; $d: $c * 3 - 1; $e: $d / 2; @data-r: $e;"`,
+                    `act@click="$name: 'benchmark'; $upper: $name.to_upper_case!; @data-r: $upper;"`,
+                    `act@click="$x: 42; $x > 20 and $x < 100? @data-r: 'in range' ~ @data-r: 'out';"`,
+                    `act@click="$arr: [1 2 3]; $first: $arr[0]; $last: $arr[2]; @data-r: $first + $last;"`,
+                    `act@click="$obj: [a: 1 b: 2]; $sum: $obj.a + $obj.b; @data-r: 'done';"`,
+                    `act@click="$s: 'hello world'; $parts: $s.split: ' '; $len: $parts.length; @data-r: $len;"`,
+                ],
+            },
+            exec: {
+                name: 'Parse + Execute',
+                desc: 'Code runs on init — measures the synchronous portion of lex → parse → bind → execute.',
+                templates: [
+                    `act="$a: 1; $b: 2; $c: $a + $b; @data-r: $c;"`,
+                    `act="$x: 42; $x > 20? @data-r: 'big' ~ @data-r: 'small';"`,
+                    `act="$s: 'hello world'; $upper: $s.to_upper_case!; @data-r: $upper;"`,
+                    `act="$arr: [10 20 30]; $len: $arr.length; @data-r: $len;"`,
+                    `act="$obj: [x: 1 y: 2]; $sum: $obj.x + $obj.y; @data-r: $sum;"`,
+                ],
+            },
+            events: {
+                name: 'Event Binding',
+                desc: 'Multiple event handlers per element — measures binding overhead with many listeners.',
+                templates: [
+                    `act@click="$x: 1;" act@mouseover="@data-h: 'true';" act@mouseout="@data-h: 'false';"`,
+                    `act@click="@data-c: 'true';" act@dblclick="@data-d: 'true';"`,
+                    `act@click="$n: 1;" act@mouseover="$n: 2;" act@mouseout="$n: 0;" act@dblclick="$n: -1;"`,
+                    `act@click="$v: 'a';" act@focus="$v: 'b';" act@blur="$v: 'c';"`,
+                ],
+            },
+            mixed: {
+                name: 'Mixed',
+                desc: 'Init code + event handlers per element — closest to real-world usage.',
+                templates: [
+                    `act="$count: 0; @data-count: $count;" act@click="$count += 1; @data-count: $count;"`,
+                    `act="$active: false; @data-active: $active;" act@click="$active: not $active; @data-active: $active;"`,
+                    `act="$label: 'Item'; @data-label: $label;" act@click="@data-clicked: 'true';"`,
+                    `act="$x: 0; $y: 0; @data-ready: 'true';" act@click="$x += 1;" act@mouseover="$y += 1;"`,
+                    `act="append: new <span>; add .initialized; *opacity: '1';" act@click="toggle .active;"`,
+                    `act="$badge: new <i>; prepend: $badge; @data-built: 'true';" act@click="$badge remove;"`,
+                ],
+            },
+            stress: {
+                name: 'Stress',
+                desc: 'Loops and heavier computation on init — worst-case for the synchronous exec path.',
+                templates: [
+                    `act="$items: [1 2 3 4 5]; $sum: 0; each $items ($sum += $item); @data-r: $sum;"`,
+                    `act="$count: 0; for i to 10 ($count += 1); @data-r: $count;"`,
+                    `act="$a: 5; $b: 10; $c: $a * $b; $c > 30? @data-r: 'big' ~ @data-r: 'small'; $d: $c + $a - $b; @data-d: $d;"`,
+                    `act="$items: [10 20 30 40 50]; $max: 0; each $items ($item > $max? $max: $item); @data-r: $max;"`,
+                ],
+            },
+            dom: {
+                name: 'DOM Manipulation',
+                desc: 'Modifies styles, classes, attributes, and content on init — measures DOM interaction overhead.',
+                templates: [
+                    `act="$el: new <span>; append: $el; $el2: new <span>; append: $el2; add .built;"`,
+                    `act="$d: new <div>; $p: new <p>; $d append: $p; append: $d; *color: 'red'; @data-styled: 'true';"`,
+                    `act="$a: new <b>; $b: new <i>; $c: new <u>; append: $a; append: $b; append: $c; first b remove;"`,
+                    `act="add .a; add .b; add .c; prepend: new <span>; @data-a: '1'; @data-b: '2';"`,
+                    `act="*opacity: '1'; *background-color: '#333'; *padding: '4px'; text_content: 'styled';"`,
+                    `act="$list: new <ol>; append: $list; $list append: new <li>; $list append: new <li>; @data-list: 'true';"`,
+                ],
+            },
+        };
+
+        // ─── Hot-eval scripts (single handler, run in a tight loop) ──────────
+        // Each is bound ONCE, then executed many times reusing the parsed AST,
+        // so parse/bind cost is excluded and only interpreter work is timed.
+        const HOT = {
+            arithmetic: {
+                name: 'Arithmetic',
+                desc: 'Chained numeric operators — many operator nodes, little real work. Dispatch-heavy.',
+                code: `$a: 1; $b: 2; $c: $a + $b; $d: $c * 3 - 1; $e: $d / 2; @data-r: $e;`,
+            },
+            member: {
+                name: 'Member access',
+                desc: 'Nested property resolution through several AtExpression nodes.',
+                code: `$o: [a: [b: [c: 5 d: 6] e: 7]]; $v: $o.a.b.c + $o.a.e; @data-r: $v;`,
+            },
+            control: {
+                name: 'Control flow',
+                desc: 'Logical operators + conditional sentence mode.',
+                code: `$x: 42; $x > 20 and $x < 100? @data-r: 'in' ~ @data-r: 'out';`,
+            },
+            array: {
+                name: 'Array + lambda',
+                desc: 'Higher-order call with an Act lambda over a small array.',
+                code: `$m: [1 2 3 4 5].map: -> $x ($x * 2); @data-r: $m[0];`,
+            },
+            string: {
+                name: 'String ops',
+                desc: 'Native String methods via host lookup.',
+                code: `$s: 'hello world'; $u: $s.to_upper_case!; $p: $u.split: ' '; @data-r: $p.length;`,
+            },
+            loop: {
+                name: 'Loop',
+                desc: 'Iterates a small collection accumulating a sum — scope + signal overhead.',
+                code: `$sum: 0; each [1 2 3 4 5] ($sum += $item); @data-r: $sum;`,
+            },
+        };
+
+        // Populate hot-script dropdown.
+        {
+            const sel = document.getElementById('h-script');
+            for (const [key, s] of Object.entries(HOT)) {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = s.name;
+                sel.appendChild(opt);
+            }
+        }
+
+        // ─── Mode / description wiring ──────────────────────────────────────
+        document.getElementById('p-profile').addEventListener('change', updateDesc);
+        document.getElementById('h-script').addEventListener('change', updateDesc);
+
+        function updateDesc() {
+            if (mode === 'pipeline') {
+                const p = PIPELINE[document.getElementById('p-profile').value];
+                profileDesc.innerHTML = `<strong>${p.name}:</strong> ${p.desc}`;
+            } else {
+                const h = HOT[document.getElementById('h-script').value];
+                profileDesc.innerHTML = `<strong>${h.name}:</strong> ${h.desc} &nbsp; <code>${escapeHtml(h.code)}</code>`;
+            }
+        }
+
+        function setMode(m) {
+            if (isRunning) return;
+            mode = m;
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+            document.getElementById('controls-pipeline').style.display = m === 'pipeline' ? 'flex' : 'none';
+            document.getElementById('controls-hot').style.display = m === 'hot' ? 'flex' : 'none';
+            results = [];
+            runCounter = 0;
+            updateDesc();
+            renderMethodology();
+            render();
+        }
+
+        function setRunning(state) {
+            isRunning = state;
+            document.getElementById('running').style.display = state && mode === 'pipeline' ? 'inline-block' : 'none';
+            document.getElementById('running-hot').style.display = state && mode === 'hot' ? 'inline-block' : 'none';
+            document.getElementById('btn-run').disabled = state;
+            document.getElementById('btn-run-hot').disabled = state;
+        }
+
+        // ─── Pipeline runner ────────────────────────────────────────────────
+        function generateHTML(n, profileKey) {
+            const templates = PIPELINE[profileKey].templates;
+            const len = templates.length;
+            const parts = new Array(n);
+            for (let i = 0; i < n; i++) parts[i] = `<div ${templates[i % len]}></div>`;
+            return parts.join('');
+        }
+
+        async function runPipeline() {
+            const n = parseInt(document.getElementById('p-count').value) || 1000;
+            const profileKey = document.getElementById('p-profile').value;
+            const repeats = parseInt(document.getElementById('p-repeats').value) || 1;
+            const warmup = parseInt(document.getElementById('p-warmup').value) || 0;
+            const html = generateHTML(n, profileKey);
+
+            const domS = [], actS = [];
+            for (let i = 0; i < warmup + repeats; i++) {
+                container.innerHTML = '';
+                // Fresh wrapper each iteration: Binder.scan() bails on an
+                // already-bound root, so reusing one would measure nothing.
+                const root = document.createElement('div');
+
+                const t0 = performance.now();
+                root.innerHTML = html;
+                container.appendChild(root);
+                const t1 = performance.now();
+                Act.init(root);          // synchronous: parse + bind (+ sync exec)
+                const t2 = performance.now();
+
+                if (i >= warmup) { domS.push(t1 - t0); actS.push(t2 - t1); }
+                await yieldToLoop();     // drain async exec tails + unblock UI (untimed)
+            }
+            container.innerHTML = '';
+
+            const dom = stats(domS), act = stats(actS);
+            results.push({
+                run: ++runCounter, n, profile: PIPELINE[profileKey].name,
+                dom, act, perElement: (act.median / n) * 1000,
+            });
+        }
+
+        // ─── Hot-eval runner ────────────────────────────────────────────────
+        async function runHotEval() {
+            const key = document.getElementById('h-script').value;
+            const code = HOT[key].code;
+            const inner = parseInt(document.getElementById('h-inner').value) || 5000;
+            const repeats = parseInt(document.getElementById('h-repeats').value) || 1;
+            const warmup = parseInt(document.getElementById('h-warmup').value) || 0;
+
+            // Build one element and parse+bind it ONCE (timed separately).
+            container.innerHTML = '';
+            const el = document.createElement('div');
+            el.setAttribute('act@click', code);
+            container.appendChild(el);
+
+            const pStart = performance.now();
+            Act.init(el);
+            const parseT = performance.now() - pStart; // one-time parse + bind (ms)
+
+            const em = Object.values(el.__act__?.events ?? {})[0];
+            if (!em) { alert('Failed to bind handler — check the script syntax.'); return; }
+            const ev = new MouseEvent('click');
+
+            // em.run() is awaitable and reuses the parsed AST → isolates eval.
+            const perEvalUs = [];
+            for (let s = 0; s < warmup + repeats; s++) {
+                const t0 = performance.now();
+                for (let i = 0; i < inner; i++) await em.run(el, ev);
+                const dt = performance.now() - t0;
+                if (s >= warmup) perEvalUs.push((dt / inner) * 1000); // µs per eval
+                await yieldToLoop();
+            }
+            container.innerHTML = '';
+
+            const ev_ = stats(perEvalUs);
+            results.push({
+                run: ++runCounter, script: HOT[key].name, inner,
+                parseT, ev: ev_,
+                opsSec: 1e6 / ev_.min,
+                breakeven: (parseT * 1000) / ev_.min, // evals whose cost == one parse
+            });
+        }
+
+        // ─── Rendering ──────────────────────────────────────────────────────
+        function escapeHtml(s) {
+            return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+
+        function render() {
+            if (mode === 'pipeline') renderPipeline();
+            else renderHot();
+        }
+
+        function renderPipeline() {
+            resultsHead.innerHTML = `<tr>
+                <th>#</th><th>Elements</th><th>Profile</th>
+                <th class="num">DOM min</th><th class="num">DOM med</th>
+                <th class="num">Act min</th><th class="num">Act med</th>
+                <th class="num">Per element</th>
+            </tr>`;
+            if (!results.length) { resultsBody.innerHTML = emptyRow(8); return; }
+            resultsBody.innerHTML = results.map(r => `<tr>
+                <td>${r.run}</td>
+                <td>${r.n.toLocaleString()}</td>
+                <td>${r.profile}</td>
+                <td class="num">${r.dom.min.toFixed(2)} ms</td>
+                <td class="num">${r.dom.median.toFixed(2)} ms</td>
+                <td class="num best">${r.act.min.toFixed(2)} ms</td>
+                <td class="num">${r.act.median.toFixed(2)} ms</td>
+                <td class="num">${r.perElement.toFixed(2)} µs</td>
+            </tr>`).join('');
+        }
+
+        function renderHot() {
+            resultsHead.innerHTML = `<tr>
+                <th>#</th><th>Script</th><th class="num">Parse once</th>
+                <th class="num">Eval min</th><th class="num">Eval med</th><th class="num">Eval mean</th>
+                <th class="num">Ops/sec</th><th class="num">Parse ≈ N evals</th>
+            </tr>`;
+            if (!results.length) { resultsBody.innerHTML = emptyRow(8); return; }
+            resultsBody.innerHTML = results.map(r => `<tr>
+                <td>${r.run}</td>
+                <td>${r.script}</td>
+                <td class="num">${r.parseT.toFixed(3)} ms</td>
+                <td class="num best">${r.ev.min.toFixed(3)} µs</td>
+                <td class="num">${r.ev.median.toFixed(3)} µs</td>
+                <td class="num">${r.ev.mean.toFixed(3)} µs</td>
+                <td class="num">${Math.round(r.opsSec).toLocaleString()}</td>
+                <td class="num">${Math.round(r.breakeven).toLocaleString()}</td>
+            </tr>`).join('');
+        }
+
+        function emptyRow(cols) {
+            return `<tr><td colspan="${cols}" class="empty-state">No results yet. Click Run to start.</td></tr>`;
+        }
+
+        function renderMethodology() {
+            const el = document.getElementById('methodology');
+            if (mode === 'pipeline') {
+                el.innerHTML = `<strong>Method.</strong> Each run generates <code>N</code> elements into a
+                    <em>fresh</em> wrapper (a reused root would be skipped by <code>Binder.scan</code>) and times
+                    <code>innerHTML</code> (DOM gen) and <code>Act.init</code> (parse + bind + synchronous exec)
+                    separately. <code>Warmup</code> iterations are discarded; the rest are reduced to
+                    <strong>min</strong> (best-case steady state) and <strong>median</strong> (robust to GC pauses).
+                    Async exec tails are <em>not</em> included here — use <strong>Hot Eval</strong> to measure the
+                    interpreter itself.`;
+            } else {
+                el.innerHTML = `<strong>Method.</strong> One handler is parsed + bound <em>once</em>, then executed
+                    <code>Evals/sample</code> times via <code>EventManager.run</code>, which <strong>reuses the parsed
+                    AST</strong> — so this measures interpreter throughput, not parsing. Each sample is µs/eval;
+                    warmup samples are discarded and the rest reduced to min/median/mean.
+                    <strong>Parse ≈ N evals</strong> is how many repeat evaluations of the same handler it takes to
+                    equal its one-time parse cost — if that number is large and real pages evaluate each handler only
+                    a handful of times, parsing/binding dominates and interpreter-dispatch micro-optimizations won't
+                    move the needle.`;
+            }
+        }
+
+        // ─── Entry points ───────────────────────────────────────────────────
+        async function run() {
+            if (isRunning) return;
+            setRunning(true);
+            try {
+                if (mode === 'pipeline') await runPipeline();
+                else await runHotEval();
+                render();
+            } catch (e) {
+                console.error(e);
+                alert('Benchmark error: ' + e.message);
+            } finally {
+                setRunning(false);
+            }
+        }
+
+        function clearResults() {
+            results = [];
+            runCounter = 0;
+            container.innerHTML = '';
+            render();
+        }
+
+        // ─── Init ───────────────────────────────────────────────────────────
+        updateDesc();
+        renderMethodology();
+        render();
+    </script>
+</body>
+
+</html>
