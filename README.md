@@ -2826,20 +2826,20 @@ Event aliases allow you to give a different name to an event handler, which is u
 Append `#alias` to the event:
 
 ```html
-<button act@click#my_handler="log: 'Handler 1'" act@click#another_handler="log: 'Handler 2'">
+<button id="handlers" act@click#my_handler="log: 'Handler 1'" act@click#another_handler="log: 'Handler 2'">
     Click me - both handlers will fire
 </button>
 
-<button act@click="kill my_handler">
-    Stop only the first handler
+<button act@click="#handlers off my_handler">
+    Remove only the first handler
 </button>
 ```
 
 This is particularly useful with the `act` event when you want to stop specific initialization handlers:
 
 ```html
-<div act@act#animation="fade: out 500ms; fade: in 500ms; repeat;">
-    <button act@click="kill animation">Stop animation</button>
+<div id="animated" act@act#animation="fade: out 500ms; fade: in 500ms; repeat;">
+    <button act@click="#animated kill animation">Stop animation</button>
 </div>
 ```
 
