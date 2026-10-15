@@ -536,6 +536,7 @@ declare namespace Act {
     static Restart: typeof Signal;
     static Return: typeof Signal;
     data?: any;
+    expression?: any;
   }
 
   // ============================================================================
@@ -583,6 +584,7 @@ declare namespace Act {
     readonly scope: Scope | null;
     readonly attr: Attr | null;
     readonly args: string[];
+    reportError(error: { token: Token; message: string }, title: string): void;
   }
 
   /** Static side of Source: the source types, keyed by name */

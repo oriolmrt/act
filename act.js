@@ -620,7 +620,10 @@
             try {
                 result = await this.perform(ctx, target, opts);
             } catch (error) {
-                if (is(error, Signal)) throw error;
+                if (is(error, Signal)) {
+                    error.expression ??= this;
+                    throw error;
+                }
                 if (is(error, ActRuntimeError)) throw error;
 
                 const wrapped = new ActRuntimeError;
@@ -1261,7 +1264,7 @@
         }
 
         fail(message) {
-            const error = new ActSyntaxError(`at line ${this.line}, column ${this.column}: ${message}`);
+            const error = new ActSyntaxError(message);
             error.token = this.peek();
             throw error;
         }
@@ -1778,29 +1781,29 @@
                     return;
                 }
 
-                this.#reportSyntaxError(error);
+                this.reportError(error, 'Syntax Error');
             }
         }
 
-        #reportSyntaxError(error) {
+        reportError(error, title) {
             const codeLines = this.code.split('\n');
             const line = codeLines[Math.max(0, error.token.line - 1)];
 
             const logArgs = [
-                '%c💣 act Syntax Error', 'font-weight: bold; font-size: 1.1em;', '\n',
-                'while parsing Source', this, '\n',
+                `%c💣 act ${title}`, 'font-weight: bold; font-size: 1.1em;', '\n',
+                error.message, '\n\n',
+                'in Source', this, '\n',
                 'for element', this.element, '\n',
             ];
 
             if (this.attr) logArgs.push(`in attribute "${this.attr.name}" of element`, this.attr.ownerElement, '\n');
-            logArgs.push(error.message, '\n\n');
+            logArgs.push('at line', error.token.line, 'column', error.token.column, '\n\n');
 
             if ((error.token.line - 1) > 1) logArgs.push(codeLines[error.token.line - 2], '\n');
             logArgs.push(
                 line.substring(0, error.token.column - error.token.value.length) +
                 '⚠️➡️' + line.substring(error.token.column - error.token.value.length, error.token.column) +
-                '⬅️⚠️' + line.substring(error.token.column) +
-                '\n'
+                '⬅️⚠️' + line.substring(error.token.column) + '\n'
             );
             if (codeLines.length - (error.token.line) > 1) logArgs.push(codeLines[error.token.line], '\n');
 
@@ -2229,7 +2232,14 @@
                 return await context.solve(this.scope, target, {});
             } catch (error) {
                 if (is(error, Signal.Halt, Signal.Stop)) return error.data;
-                if (is(error, ActRuntimeError) && error.actTrace?.length) this.#reportRuntimeError(error);
+                if (is(error, Signal) && error.expression) error.expression.source.reportError({
+                    token: error.expression.tokenStart,
+                    message: `Stray '${error.expression.tokenStart.value}': ${error.expression.tokenStart.value === 'return' ?
+                        `It needs to be enclosed in a function ('->').` :
+                        `It needs to be enclosed in a loop keyword ('each', 'for', 'loop', 'while').`
+                    }`,
+                }, 'Signal error');
+                else if (is(error, ActRuntimeError) && error.actTrace?.length) this.#reportRuntimeError(error);
                 this.#dispatchLifecycle(target, 'acterror', event, { error });
             } finally {
                 this.contexts.delete(context);
@@ -3181,7 +3191,7 @@
     for (const type of ['function', 'boolean', 'number', 'bigint', 'symbol', 'undefined']) Library[type] = {};
 
     const Act = global.Act = {
-        get version() { return '0.2.0'; },
+        get version() { return '0.2.1'; },
 
         config: {
             convertToCamelCase: true,

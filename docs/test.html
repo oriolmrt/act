@@ -3314,6 +3314,56 @@
                     </div>
                 </div>
 
+                <div class="test" id="stray-break">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stray-break</code> stray break aborts the handler and fires acterror</div>
+                    <div data-target data-e="caught" act@acterror="@r: 'caught'">
+                        <script type="text/act" act>
+                            break;
+                            @r: 'should not run';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="stray-continue">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stray-continue</code> stray continue aborts the handler and fires acterror</div>
+                    <div data-target data-e="caught" act@acterror="@r: 'caught'">
+                        <script type="text/act" act>
+                            continue;
+                            @r: 'should not run';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="stray-return">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>stray-return</code> stray return aborts the handler and fires acterror</div>
+                    <div data-target data-e="caught" act@acterror="@r: 'caught'">
+                        <script type="text/act" act>
+                            return;
+                            @r: 'should not run';
+                        </script>
+                    </div>
+                </div>
+
+                <div class="test" id="break-from-function-in-loop">
+                    <div class="status">⏳</div>
+                    <div class="name"><code>break-from-function-in-loop</code> break inside a function still breaks the caller's loop</div>
+                    <div data-target data-e="1">
+                        <script type="text/act" act>
+                            $count: 0;
+                            $breaker: -> (break);
+                            loop (
+                                $count += 1;
+                                $count > 5? break;
+                                $breaker!;
+                            );
+                            @r: $count;
+                        </script>
+                    </div>
+                </div>
+
                 <div class="test" id="restart-signal" act="local $runs: 0">
                     <div class="status">⏳</div>
                     <div class="name"><code>restart-signal</code> restart (reruns from top)</div>

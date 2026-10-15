@@ -1,6 +1,6 @@
 # act
 
-> [![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
+> [![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](CHANGELOG.md)
 > [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > [!CAUTION]
@@ -1788,6 +1788,10 @@ is_locked? log: 'Locked';
 
 Act has a few statements called signals that can be used to control the execution flow of a scope. They are [keywords](#keywords) that work by throwing a control-flow signal which the enclosing loop, scope, or function catches. They are grouped separately here because they steer execution rather than compute a value.
 
+Each signal needs something to catch it: `break` and `continue` need an enclosing loop (`each`, `for`, `while` or `loop`), and `return` needs an enclosing function (`->`). That enclosure may be at the call site rather than in the same block, so a `break` inside a function or a `def` block is fine as long as the caller is looping.
+
+If nothing catches a signal, it escapes the whole handler: the rest of the handler is skipped, the signal is reported in the console, and an [`acterror`](#lifecycle-events) event is dispatched with the signal as `detail.error`.
+
 #### `break`
 
 Breaks the execution of the current scope on an `each`, `loop`, `for` or `while` operation. It may take an optional value that acts as a return value.
@@ -2973,7 +2977,7 @@ Shares the same `detail` properties as `actstart`.
 
 #### `acterror`
 
-Dispatched on the **target element** when an act event handler throws a runtime error.
+Dispatched on the **target element** when an act event handler throws a runtime error, or when a [signal](#signals) escapes the handler with nothing to catch it.
 
 ```js
 document.addEventListener('acterror', (e) => {
@@ -3328,7 +3332,7 @@ The global `Act` object is the JavaScript entry point. It exists for configurati
 
 | Member | Description |
 | --- | --- |
-| `Act.version` | The current version string (e.g. `'0.2.0'`). |
+| `Act.version` | The current version string (e.g. `'0.2.1'`). |
 | `Act.config` | The live [configuration](#configuration) object. Mutate it from inside an [`install`](#hooks) hook. |
 | `Act.extensions` | The array of registered [extensions](#actextensions). |
 | `Act.Library` | The [Library](#act-library) registry. Add methods, keywords, and prefixes here to extend the language. |

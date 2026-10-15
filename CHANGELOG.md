@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] - 2026-10-15
+
+### Fixes
+
+- `break` and `continue` with no enclosing loop, and `return` with no enclosing function, are now reported as an error in the console and dispatch `acterror` instead of silently abandoning the handler.
+
 ## [0.2.0] - 2026-08-06
 
 ⚠️ marks a breaking change.
@@ -77,4 +83,5 @@
 
 Editor support (VSCode, Neovim, Zed, TextMate, Visual Studio, JetBrains) now lives in [oriolmrt/act-editors](https://github.com/oriolmrt/act-editors).
 
+[0.2.1]: https://github.com/oriolmrt/act/releases/tag/v0.2.1
 [0.2.0]: https://github.com/oriolmrt/act/releases/tag/v0.2.0
